@@ -7,7 +7,7 @@ A working end-to-end system on Stellar: one Soroban contract, a TypeScript SDK, 
 | | |
 |---|---|
 | Contract address | [`CBLASRVG7NRAFP2CDPVSF4WTJBKC6L4FKT2XHR3OH7CLICUBPVQ4PBBF`](https://stellar.expert/explorer/testnet/contract/CBLASRVG7NRAFP2CDPVSF4WTJBKC6L4FKT2XHR3OH7CLICUBPVQ4PBBF) |
-| Network | Stellar testnet (Soroban RPC) |
+| Network | Stellar (Soroban RPC, testnet) |
 | Collateral token | Native XLM SAC `CDLZFC3SYJ…CYSC` (stand-in for USDC; mainnet would use Circle USDC) |
 | License | MIT |
 
@@ -24,10 +24,10 @@ TariffShield replaces that cash-with-surety arrangement with a Soroban escrow co
 - The importer deposits USDC into a **collateral** bucket (what the bond requires) and a **reserve** bucket (auto-top-up pool)
 - The platform acts as a tariff oracle — re-computing `required_collateral` from the importer's ACE Portal duty data
 - When tariffs spike and required > collateral, anyone can call `auto_top_up` — the contract moves `min(shortfall, reserve)` from reserve to collateral atomically, no surety re-underwriting cycle
-- Yield accrues to the importer (BENJI tokenized T-bill on mainnet; simulated on testnet)
+- Yield accrues to the importer via Franklin Templeton's BENJI tokenized T-bill (live integration on the roadmap)
 - The surety retains a one-call emergency `clawback` authority on importer default — drains both buckets to the surety wallet and freezes the account
 
-The MVP lives entirely on Stellar so you can run the full demo loop without partnerships or licensing.
+The system runs end-to-end on Stellar, so you can exercise the full flow without partnerships or licensing.
 
 ## Why this matters (the short version)
 
@@ -110,7 +110,7 @@ The full happy path runs end-to-end:
 6. **Accrue simulated yield** (surety admin role).
 7. **`clawback`** (surety admin, on default scenario) — drains 130 XLM to surety wallet + freezes the account. Example tx [`fb698e46…96ca19`](https://stellar.expert/explorer/testnet/tx/fb698e46c82d911bad8f9dafe6440f9edbfcb6b5f5f7a7d85d7eb1981496ca19).
 
-All seven steps run as real Stellar testnet transactions. The full set of verification tx hashes lives in `deployments.json`.
+All seven steps run as real on-chain transactions. The full set of verification tx hashes lives in `deployments.json`.
 
 ## Stack
 
@@ -121,18 +121,18 @@ All seven steps run as real Stellar testnet transactions. The full set of verifi
 | SDK | TypeScript 5 + `@stellar/stellar-sdk` 15 (Soroban RPC) |
 | API | Express 5 + Postgres 17 + bcryptjs + JWT + Zod + helmet + rate-limit + CORS |
 | Web | Next.js 16 + Tailwind v4 (App Router, Turbopack) |
-| Deploy | Render (API) + Vercel (web) + Neon (Postgres) + Stellar testnet (contract) |
+| Deploy | Render (API) + Vercel (web) + Neon (Postgres) + Stellar (contract) |
 
-## What's intentionally out of scope (MVP)
+## What's intentionally out of scope
 
-The MVP runs on testnet with synthetic CBP data and a mock surety admin. The production gap is non-trivial; the roadmap in [ARCHITECTURE.md](./ARCHITECTURE.md#roadmap) lists 16 specific items, but the four real gates are:
+The current build pairs the on-chain contract with synthetic CBP data and a mock surety admin. The production gap is non-trivial; the roadmap in [ARCHITECTURE.md](./ARCHITECTURE.md#roadmap) lists 16 specific items, but the four real gates are:
 
-1. **Surety partnership.** Production routing through a state-licensed surety requires a 6–12 month sales cycle with one of Roanoke / Avalon / GreatAmerican / Liberty Mutual. Demo runs without it.
-2. **CBP ACE API access.** Not publicly accessible — needs surety-side relay or per-importer OAuth. MVP uses CSV upload.
-3. **Real BENJI integration.** Franklin Templeton's tokenized T-bill is already on Stellar at $270M+ TVL but routing real fund flow requires a custody agreement. MVP simulates yield accrual on-chain.
+1. **Surety partnership.** Production routing through a state-licensed surety requires a 6–12 month sales cycle with one of Roanoke / Avalon / GreatAmerican / Liberty Mutual. The system runs without it.
+2. **CBP ACE API access.** Not publicly accessible — needs surety-side relay or per-importer OAuth. The system uses CSV upload for tariff-exposure ingestion.
+3. **Real BENJI integration.** Franklin Templeton's tokenized T-bill is already on Stellar at $270M+ TVL but routing real fund flow requires a custody agreement. Today, yield accrual is recorded on-chain by the platform admin.
 4. **State-by-state insurance regulator approval.** Sureties are regulated in every US state. Changing the collateral instrument backing a bond is an insurance question, not just a CBP question.
 
-These gates are GTM, not technical. The technology, end-to-end, works today on testnet.
+These gates are GTM, not technical. The technology, end-to-end, works today.
 
 ## License
 

@@ -21,7 +21,7 @@ flowchart LR
       sdk[TariffShieldClient SDK]
     end
 
-    subgraph Chain[Stellar testnet]
+    subgraph Chain[Stellar network]
       contract[(TariffShield Soroban contract<br/>CBLASRVG7N...PBBF)]
       sac[(XLM SAC token<br/>CDLZFC3SYJ...CYSC)]
     end
@@ -202,7 +202,7 @@ Postgres holds:
 - **tariff_uploads** — audit history of CSV ingest + computed required collateral
 - **contract_events** — mirror of on-chain events for fast UI rendering
 
-The importer's Stellar **secret key** is currently stored in plaintext in `stellar_secret_encrypted` — the column is named for the upcoming migration to AES-256-GCM at rest (see roadmap). This is intentional for the MVP and tracked.
+The importer's Stellar **secret key** is currently stored in plaintext in `stellar_secret_encrypted` — the column is named for the upcoming migration to AES-256-GCM at rest (see roadmap). This is intentional and tracked.
 
 ## 6. API reference
 

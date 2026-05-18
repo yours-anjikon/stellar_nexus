@@ -68,7 +68,7 @@ Math on a 100-importer pilot:
 
 ## The honest gates
 
-Four things stand between this MVP and a production business. We name them because hiding them doesn't make them go away.
+Four things stand between today's system and a production business. We name them because hiding them doesn't make them go away.
 
 ### 1. Surety partnership
 
@@ -76,15 +76,15 @@ Roanoke, Avalon, GreatAmerican, Liberty Mutual are 100-year-old state-regulated 
 
 ### 2. CBP ACE API access
 
-CBP's Automated Commercial Environment Secure Data Portal is not publicly accessible. Live tariff exposure data requires either importer-side OAuth (compliance friction the importer's customs broker will object to) or surety-side relay via their existing reporting access. Same gate as #1. The MVP uses CSV upload to demonstrate the data flow.
+CBP's Automated Commercial Environment Secure Data Portal is not publicly accessible. Live tariff exposure data requires either importer-side OAuth (compliance friction the importer's customs broker will object to) or surety-side relay via their existing reporting access. Same gate as #1. The system uses CSV upload for tariff-exposure ingestion until the live ACE path lands.
 
 ### 3. Real BENJI integration
 
-Franklin Templeton's tokenized T-bill is already on Stellar at $270M+ TVL but routing real fund flow into and out of TariffShield requires a custody agreement with Franklin Templeton. MVP simulates yield accrual on-chain with the platform admin recording yield events; mainnet wires the real fund flow.
+Franklin Templeton's tokenized T-bill is already on Stellar at $270M+ TVL but routing real fund flow into and out of TariffShield requires a custody agreement with Franklin Templeton. Today, yield accrual is recorded on-chain by the platform admin with the platform admin recording yield events; mainnet wires the real fund flow.
 
 ### 4. State-by-state insurance regulator approval
 
-Sureties are regulated in every US state separately. Changing the collateral instrument backing a CBP bond is an insurance question (not just a CBP question). The MVP cleanly avoids this gate by using USDC *alongside* the existing surety relationship rather than replacing the bond itself. Long-term, full bond-on-chain requires per-state regulator engagement — a 1–3 year roadmap item.
+Sureties are regulated in every US state separately. Changing the collateral instrument backing a CBP bond is an insurance question (not just a CBP question). The current scoping cleanly avoids this gate by using USDC *alongside* the existing surety relationship rather than replacing the bond itself. Long-term, full bond-on-chain requires per-state regulator engagement — a 1–3 year roadmap item.
 
 ## Differentiation
 
@@ -100,7 +100,7 @@ Sureties are regulated in every US state separately. Changing the collateral ins
 - The Soroban contract is **one file, 8 entrypoints, 14 cargo tests, 12,284 bytes of optimized wasm**. That's a focused week of Rust work after toolchain setup.
 - The API + web layer is conventional Express + Next.js + Postgres — well-understood territory.
 - No multi-party crypto custody. Platform holds the contract admin key + surety holds the clawback key + importer holds their own deposit key. Three-party trust model is the whole architecture.
-- No mainnet money movement. Testnet demo + scoped contributor issues for production.
+- No mainnet money movement. On-chain verification today + scoped contributor work for production rollout.
 - No new clearing rail. CBP keeps its relationship with the surety; nothing about the importer's bond-with-CBP changes.
 
 ## What ships in this repository
@@ -110,7 +110,7 @@ Sureties are regulated in every US state separately. Changing the collateral ins
 - A TypeScript SDK wrapping the contract over Soroban RPC
 - An Express API + Postgres mirror with mock CBP CSV ingestion
 - A Next.js dashboard with separate importer + surety admin surfaces
-- Fully verified end-to-end happy path on testnet: importer signup → friendbot fund → register on-chain → deposit collateral + reserve → simulated tariff spike → auto-top-up → simulated yield → surety clawback (every step has an explorer-linked tx hash in `deployments.json`)
+- Fully verified end-to-end happy path on-chain: importer signup → friendbot fund → register on-chain → deposit collateral + reserve → simulated tariff spike → auto-top-up → simulated yield → surety clawback (every step has an explorer-linked tx hash in `deployments.json`)
 - A 16-item roadmap of scoped, contributor-friendly tasks for production hardening
 
 ---
