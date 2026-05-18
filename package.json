@@ -1,0 +1,28 @@
+{
+  "name": "tariffshield",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Soroban-backed customs-bond collateral rail for US importers — Stellar testnet build",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "contract:build": "cd contracts && cargo build --target wasm32-unknown-unknown --release",
+    "contract:test": "cd contracts && cargo test",
+    "contract:deploy": "tsx scripts/deploy-contracts.ts",
+    "seed": "tsx scripts/seed.ts",
+    "e2e": "tsx scripts/e2e.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

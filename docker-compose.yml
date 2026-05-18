@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: tariffshield-postgres
+    environment:
+      POSTGRES_DB: tariffshield
+      POSTGRES_USER: tariffshield
+      POSTGRES_PASSWORD: tariffshield_dev_password
+    ports:
+      - "5443:5432"
+    volumes:
+      - tariffshield_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tariffshield -d tariffshield"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tariffshield_pg:
