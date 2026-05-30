@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LogOut, Menu, X, Wallet, Moon, Sun } from "lucide-react";
+import { LogOut, Menu, X, Wallet, Moon, Sun, Radio } from "lucide-react";
 import { useWallet } from './WalletAdapterProvider';
 import { useTheme } from '../context/ThemeContext';
 import { useI18n } from '../lib/i18n';
 import { ICON_CLASS } from "../lib/constants";
 import { WalletAddressCopyButton } from "../../components/WalletAddressCopyButton";
 import { NetworkMismatchWarning } from './NetworkMismatchWarning';
+import { useNetworkMismatch } from '@/lib/hooks/useNetworkMismatch';
 
 export default function Navbar() {
     const { isConnected, address, connect, disconnect } = useWallet();
     const { theme, toggleTheme } = useTheme();
+    const { isMismatch, expectedNetworkName, currentNetworkName } = useNetworkMismatch();
     const { t } = useI18n();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -70,6 +72,21 @@ export default function Navbar() {
                         >
                             {theme === 'light' ? <Moon className={ICON_CLASS.sm} /> : <Sun className={ICON_CLASS.sm} />}
                         </button>
+                        {/* Network badge — visible only when wallet is connected */}
+                        {isConnected && (
+                            <span
+                                title={isMismatch ? `Wallet is on ${currentNetworkName}; app requires ${expectedNetworkName}` : `Connected to ${currentNetworkName}`}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                                    isMismatch
+                                        ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500'
+                                        : 'bg-green-500/10 border-green-500/30 text-green-500'
+                                }`}
+                            >
+                                <Radio className="w-3 h-3" />
+                                {isMismatch ? currentNetworkName : expectedNetworkName}
+                            </span>
+                        )}
+
                         {isConnected && address ? (
                             <div className="flex items-center gap-3">
                                 <WalletAddressCopyButton address={address} />
@@ -117,6 +134,21 @@ export default function Navbar() {
                 {isMenuOpen && (
                     <div className="md:hidden glass border-t border-border animate-in slide-in-from-top-4 duration-300">
                         <div className="px-4 pt-2 pb-6 space-y-1">
+                            {/* Network badge — mobile */}
+                            {isConnected && (
+                                <div className="px-3 py-2">
+                                    <span
+                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                                            isMismatch
+                                                ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500'
+                                                : 'bg-green-500/10 border-green-500/30 text-green-500'
+                                        }`}
+                                    >
+                                        <Radio className="w-3 h-3" />
+                                        {isMismatch ? `Wrong network: ${currentNetworkName}` : expectedNetworkName}
+                                    </span>
+                                </div>
+                            )}
                             <Link
                                 href="/markets"
                                 className="block px-3 py-2 text-base font-medium text-muted-foreground hover:text-primary hover:bg-muted/50 rounded-lg transition-colors"
