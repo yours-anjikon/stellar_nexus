@@ -938,6 +938,9 @@ fn b4_invalid_winning_outcome_does_not_write_winning_outcome() {
 fn b5_settle_pool_winning_outcome_0_is_valid() {
     let t = setup();
     let pool_id = make_pool(&t);
+    // A participant is required for settlement (default min = 1).
+    t.client
+        .place_bet(&t.user, &pool_id, &0u32, &100i128, &None::<Address>);
     expire_pool(&t.env);
 
     // Must not panic
@@ -956,6 +959,9 @@ fn b5_settle_pool_winning_outcome_0_is_valid() {
 fn b6_settle_pool_winning_outcome_1_is_valid() {
     let t = setup();
     let pool_id = make_pool(&t);
+    // A participant is required for settlement (default min = 1).
+    t.client
+        .place_bet(&t.user, &pool_id, &1u32, &100i128, &None::<Address>);
     expire_pool(&t.env);
 
     // Must not panic
@@ -1342,6 +1348,10 @@ fn f1_delegated_settler_can_settle_after_expiry() {
     let settler = Address::generate(&t.env);
     t.client.assign_settler(&t.admin, &pool_id, &settler);
 
+    // A participant is required for settlement (default min = 1).
+    t.client
+        .place_bet(&t.user, &pool_id, &0u32, &100i128, &None::<Address>);
+
     expire_pool(&t.env);
 
     t.client.settle_pool(&settler, &pool_id, &0u32);
@@ -1384,6 +1394,10 @@ fn f3_non_creator_cannot_assign_settler() {
 fn f4_creator_can_settle_without_delegated_settler() {
     let t = setup();
     let pool_id = make_pool(&t);
+
+    // A participant is required for settlement (default min = 1).
+    t.client
+        .place_bet(&t.user, &pool_id, &1u32, &100i128, &None::<Address>);
 
     expire_pool(&t.env);
 
@@ -2528,6 +2542,141 @@ fn test_set_volume_fee_tiers_unauthorized_rejected() {
         }],
     );
     client.set_volume_fee_tiers(&attacker, &tiers);
+}
+
+// ── Minimum participants for settlement ───────────────────────────────────────
+
+/// Build a clean contract and return (env, client, treasury_recipient, mint).
+fn min_participants_setup() -> (
+    Env,
+    PredinexContractClient<'static>,
+    Address,
+    token::StellarAssetClient<'static>,
+) {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+    client.initialize(&token_id.address(), &token_admin);
+
+    let client: PredinexContractClient<'static> = unsafe { core::mem::transmute(client) };
+    let token_admin_client: token::StellarAssetClient<'static> =
+        unsafe { core::mem::transmute(token_admin_client) };
+    (env, client, token_admin, token_admin_client)
+}
+
+/// Default threshold is 1 and is configurable; the setter persists.
+#[test]
+fn test_min_settlement_participants_default_and_set() {
+    let (_env, client, treasury, _mint) = min_participants_setup();
+    assert_eq!(client.get_min_settlement_participants(), 1);
+
+    client.set_min_settlement_participants(&treasury, &3);
+    assert_eq!(client.get_min_settlement_participants(), 3);
+}
+
+/// A pool with fewer participants than the threshold cannot be settled, and the
+/// pool stays Open after the rejected attempt.
+#[test]
+fn test_settle_below_min_participants_rejected() {
+    let (env, client, treasury, mint) = min_participants_setup();
+    client.set_min_settlement_participants(&treasury, &2);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    mint.mint(&user, &1000);
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Thin Market"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+    // Only one participant — below the threshold of 2.
+    client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
+
+    env.ledger().with_mut(|li| li.timestamp = 3601);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.settle_pool(&creator, &pool_id, &0);
+    }));
+    assert!(
+        result.is_err(),
+        "settlement below threshold must be rejected"
+    );
+
+    let pool = client.get_pool(&pool_id).expect("pool must still exist");
+    assert_eq!(pool.status, PoolStatus::Open, "pool must remain Open");
+}
+
+/// Once the participant count reaches the threshold, settlement succeeds.
+#[test]
+fn test_settle_meets_min_participants_succeeds() {
+    let (env, client, treasury, mint) = min_participants_setup();
+    client.set_min_settlement_participants(&treasury, &2);
+
+    let creator = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    mint.mint(&alice, &1000);
+    mint.mint(&bob, &1000);
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Market"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+    // Two distinct participants meet the threshold of 2.
+    client.place_bet(&alice, &pool_id, &0, &100, &None::<Address>);
+    client.place_bet(&bob, &pool_id, &1, &100, &None::<Address>);
+
+    env.ledger().with_mut(|li| li.timestamp = 3601);
+    client.settle_pool(&creator, &pool_id, &0);
+
+    let pool = client.get_pool(&pool_id).expect("pool must exist");
+    assert_eq!(pool.status, PoolStatus::Settled(0));
+}
+
+/// Setting the threshold to 0 disables the check (empty pools may settle).
+#[test]
+fn test_min_settlement_participants_zero_disables_check() {
+    let (env, client, treasury, _mint) = min_participants_setup();
+    client.set_min_settlement_participants(&treasury, &0);
+
+    let creator = Address::generate(&env);
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Empty Market"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+
+    env.ledger().with_mut(|li| li.timestamp = 3601);
+    client.settle_pool(&creator, &pool_id, &0);
+
+    let pool = client.get_pool(&pool_id).expect("pool must exist");
+    assert_eq!(pool.status, PoolStatus::Settled(0));
+}
+
+/// Only the treasury recipient may change the threshold.
+#[test]
+#[should_panic]
+fn test_set_min_settlement_participants_unauthorized_rejected() {
+    let (env, client, _treasury, _mint) = min_participants_setup();
+    let attacker = Address::generate(&env);
+    client.set_min_settlement_participants(&attacker, &5);
 }
 
 // ── Issue #173: get_claim_status read method ──────────────────────────────────

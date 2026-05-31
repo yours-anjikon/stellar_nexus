@@ -468,6 +468,26 @@ Tiers apply at settlement: the contract selects the highest `(volume_threshold, 
 
 ---
 
+### 16. `min_settlement_participants_set`
+
+Emitted when the minimum participant threshold required to settle a pool is changed.
+
+**Trigger:** `PredinexContract::set_min_settlement_participants`
+
+**Topics tuple:**
+```
+(Symbol("min_settlement_participants_set"), Symbol("v1"))
+```
+
+**Data:**
+```
+min_participants: u32   // 0 disables the check; default is 1
+```
+
+A `settle_pool` / `settle_pools` call fails with `InsufficientParticipants` when the pool's `participant_count` is below this threshold.
+
+---
+
 ## Parsing guide for frontend / indexers
 
 ### Topic structure
