@@ -491,6 +491,43 @@ The `UploadField` component handles all three steps transparently.
 
 ---
 
+## Testing
+
+### Unit Tests
+Unit tests use **Vitest** and **React Testing Library**.
+```bash
+pnpm --filter @brandblitz/web test
+```
+
+### E2E Tests
+E2E tests use **Playwright**. They run against a local build of the application and require the API and database to be running.
+
+#### 1. Setup Environment
+Ensure your `.env.local` is configured and infrastructure is up:
+```bash
+docker compose up -d postgres redis minio minio-setup
+```
+
+#### 2. Seed Test Data
+Run the seeding script to create a test brand and challenge:
+```bash
+# From root
+pnpm tsx scripts/seed-e2e-challenge.ts
+```
+
+#### 3. Run Tests
+```bash
+# From apps/web
+pnpm exec playwright test
+
+# Or with UI mode
+pnpm exec playwright test --ui
+```
+
+E2E tests are configured in `playwright.config.ts` and located in `tests/e2e/`. They use a programmatic authentication fixture to skip the Google login UI.
+
+---
+
 ## Building & Running
 
 ```bash

@@ -13,14 +13,48 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "BrandBlitz — Stellar Edition",
+  title: {
+    default: "BrandBlitz — Stellar Edition",
+    template: "%s | BrandBlitz",
+  },
   description:
     "Brands deposit USDC on Stellar. Users compete in 45-second brand challenges. Top performers earn USDC instantly.",
+  metadataBase: new URL(process.env.WEB_URL ?? "http://localhost:3000"),
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   openGraph: {
     title: "BrandBlitz",
     description: "Earn USDC by mastering brand challenges",
+    url: "/",
+    siteName: "BrandBlitz",
+    images: [
+      {
+        url: "/og-default.png",
+        width: 1200,
+        height: 630,
+        alt: "BrandBlitz — Earn USDC by mastering brand challenges",
+      },
+    ],
+    locale: "en_US",
     type: "website",
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "BrandBlitz",
+    description: "Earn USDC by mastering brand challenges",
+    images: ["/og-default.png"],
+  },
+};
+
+export const viewport = {
+  themeColor: "#6366f1",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -49,10 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)] antialiased">
         <FingerprintProvider>
           <AuthBoundary>
-            <SessionProvider>
-              {children}
-              <Toaster closeButton position="top-right" richColors />
-            </SessionProvider>
+            <Providers>{children}</Providers>
           </AuthBoundary>
         </FingerprintProvider>
       </body>

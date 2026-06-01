@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import Link from "next/link";
 
-export default function GameError({
+export default function ChallengeError({
   error,
   reset,
 }: {
@@ -12,7 +12,7 @@ export default function GameError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error, { tags: { boundary: "game" } });
+    Sentry.captureException(error, { tags: { boundary: "challenge-detail" } });
   }, [error]);
 
   return (
@@ -34,10 +34,10 @@ export default function GameError({
         </svg>
       </div>
 
-      <h1 className="text-2xl font-bold mb-3">Your game session hit a snag</h1>
+      <h1 className="text-2xl font-bold mb-3">Challenge loading failed</h1>
       <p className="text-[var(--muted-foreground)] mb-8 max-w-sm">
-        Something went wrong during the challenge. Don&apos;t worry — your
-        previous progress has been saved.
+        We couldn&apos;t load this specific challenge. It might be ended or
+        unavailable. Try refreshing or browse others.
       </p>
 
       <div className="flex flex-wrap gap-3 justify-center">
@@ -45,13 +45,13 @@ export default function GameError({
           onClick={reset}
           className="inline-flex items-center justify-center rounded-md bg-[var(--primary)] px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity min-h-[44px]"
         >
-          Retry challenge
+          Retry
         </button>
         <Link
           href="/"
           className="inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--background)] px-5 py-2.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors min-h-[44px]"
         >
-          Browse challenges
+          Back to Challenges
         </Link>
       </div>
 
