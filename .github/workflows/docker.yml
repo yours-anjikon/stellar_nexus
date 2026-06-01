@@ -2,8 +2,6 @@ name: Docker publish
 
 on:
   push:
-    branches:
-      - "main"
     tags:
       - "v*"
 
@@ -17,23 +15,17 @@ env:
 
 jobs:
   build-push:
-    name: Build & push ${{ matrix.image }} image
+    name: Build & push ${{ matrix.app }} image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-      id-token: write # required for cosign OIDC keyless signing
+      id-token: write   # required for cosign OIDC keyless signing
 
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - image: api
-            dockerfile: apps/api/Dockerfile
-          - image: worker
-            dockerfile: apps/api/Dockerfile
-          - image: web
-            dockerfile: apps/web/Dockerfile
+        app: [api, web]
 
     steps:
       - uses: actions/checkout@v4
@@ -52,32 +44,31 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.image }}
+          images: ${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.app }}
           tags: |
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest
           labels: |
-            org.opencontainers.image.title=BrandBlitz ${{ matrix.image }}
-            org.opencontainers.image.description=BrandBlitz ${{ matrix.image }} service
+            org.opencontainers.image.title=BrandBlitz ${{ matrix.app }}
+            org.opencontainers.image.description=BrandBlitz ${{ matrix.app }} service
             org.opencontainers.image.vendor=privexlabs
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
 
-      - name: Build and push ${{ matrix.image }}
+      - name: Build and push ${{ matrix.app }}
         id: push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: apps/${{ matrix.app }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.image }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.image }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.app }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.app }}:buildcache,mode=max
           provenance: true
           sbom: true
 
@@ -87,4 +78,4 @@ jobs:
       - name: Sign image with cosign (keyless OIDC)
         run: |
           cosign sign --yes \
-            "${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.image }}@${{ steps.push.outputs.digest }}"
+            "${{ env.REGISTRY }}/${{ env.ORG }}/brandblitz-${{ matrix.app }}@${{ steps.push.outputs.digest }}"

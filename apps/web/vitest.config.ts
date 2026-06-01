@@ -19,5 +19,24 @@ export default defineProject({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    coverage: {
+      provider: "v8",
+      include: [
+        "src/components/brand/brand-kit-form.tsx",
+        "src/components/brand/upload-field.tsx",
+        "src/components/game/countdown-timer.tsx",
+        "src/components/game/challenge-round.tsx",
+        "src/components/game/warmup-phase.tsx",
+        "src/components/game/result-screen.tsx",
+      ],
+      reporter: ["text", "lcov", "json", "html"],
+      reportsDirectory: "./coverage",
+      thresholds: {
+        statements: 70,
+        branches: 70,
+        functions: 70,
+        lines: 70,
+      },
+    },
   },
 });

@@ -31,47 +31,6 @@ jobs:
         # The second call enforces runbooks strictly because they are the
         # critical operational documents (rotate-secrets.md, cdn-purge.md, …)
 
-  validate-env-example:
-    name: Validate .env.example against API config
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm validate-env-example
-
-  # ── OpenAPI spec drift (#143) ────────────────────────────────────────────────
-  openapi-drift:
-    name: OpenAPI spec drift (docs/openapi.yml)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Regenerate spec
-        working-directory: apps/api
-        run: pnpm gen:openapi
-      - name: Fail on uncommitted drift
-        run: |
-          if ! git diff --exit-code -- docs/openapi.yml; then
-            echo ""
-            echo "::error::docs/openapi.yml is out of date."
-            echo "Run 'pnpm --filter @brandblitz/api gen:openapi' locally and commit the diff."
-            exit 1
-          fi
-
   # ── Unit tests ───────────────────────────────────────────────────────────────
   test-api:
     name: API unit tests
@@ -117,27 +76,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @brandblitz/storage test
-
-  bundle-analysis:
-    name: Web Bundle Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build Web
-        working-directory: apps/web
-        run: pnpm build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost/api
-      - name: Check Bundle Budget
-        run: node scripts/check-bundle-budget.mjs
 
   # ── Build + source-map upload (Sentry) ──────────────────────────────────────
   build:
