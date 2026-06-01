@@ -5,6 +5,16 @@ import { LiveGlobalLeaderboard } from "@/components/leaderboard/live-global-lead
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Global Leaderboard",
+  description: "See the top performers across all BrandBlitz challenges and their USDC earnings.",
+  openGraph: {
+    title: "Global Leaderboard | BrandBlitz",
+    description: "See the top performers across all BrandBlitz challenges and their USDC earnings.",
+  },
+};
 
 async function getGlobalLeaderboard(): Promise<{
   entries: LeaderboardEntry[];

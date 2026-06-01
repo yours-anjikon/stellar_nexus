@@ -13,9 +13,43 @@ import {
   BadgeGrid,
   type Badge as UserBadge,
 } from "@/components/gamification/badge-grid";
+import type { Metadata } from "next";
 
 interface ProfilePageProps {
   params: Promise<{ username: string }>;
+}
+
+export async function generateMetadata({ params }: ProfilePageProps): Promise<Metadata> {
+  const { username } = await params;
+  const { user } = await getUserProfile(username);
+
+  if (!user) {
+    return {
+      title: "Profile Not Found",
+    };
+  }
+
+  const title = `${user.displayName} (@${user.username}) — Profile`;
+  const description = `Check out ${user.displayName}'s profile on BrandBlitz. They have earned ${formatUsdc(user.totalEarned ?? "0")} USDC across ${user.totalChallenges ?? 0} challenges.`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `/profile/${username}`,
+    },
+    openGraph: {
+      title,
+      description,
+      images: user.avatarUrl ? [{ url: user.avatarUrl, alt: user.displayName }] : undefined,
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+      images: user.avatarUrl ? [user.avatarUrl] : undefined,
+    },
+  };
 }
 
 async function getUserProfile(

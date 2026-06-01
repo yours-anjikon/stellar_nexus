@@ -23,33 +23,62 @@ function getAllowedOrigins() {
   return ["localhost:3000", "127.0.0.1:3000"];
 }
 
+/**
+ * Constructs image remotePatterns from environment variables.
+ * Supports:
+ *  - Dev: MinIO at localhost:9000 + 127.0.0.1:9000
+ *  - Prod/staging: S3 host via NEXT_PUBLIC_CDN_HOST or NEXT_PUBLIC_S3_HOST (e.g., assets.brandblitz.app)
+ */
+function getImageRemotePatterns() {
+  const patterns = [
+    // Google OAuth avatars
+    { protocol: "https" as const, hostname: "lh3.googleusercontent.com" },
+  ];
+
+  // MinIO development hosts (local testing, Docker)
+  patterns.push(
+    {
+      protocol: "http" as const,
+      hostname: "localhost",
+      port: "9000",
+      pathname: "/**",
+    },
+    {
+      protocol: "http" as const,
+      hostname: "127.0.0.1",
+      port: "9000",
+      pathname: "/**",
+    }
+  );
+
+  // Production/Staging CDN host from env
+  const cdnHost = process.env.NEXT_PUBLIC_CDN_HOST || process.env.NEXT_PUBLIC_S3_HOST;
+  if (cdnHost) {
+    patterns.push({
+      protocol: "https" as const,
+      hostname: cdnHost,
+      pathname: "/**",
+    });
+  }
+
+  // Fallback to the legacy assets.brandblitz.app for backward compatibility
+  if (!cdnHost && process.env.NODE_ENV === "production") {
+    patterns.push({
+      protocol: "https" as const,
+      hostname: "assets.brandblitz.app",
+      pathname: "/**",
+    });
+  }
+
+  return patterns;
+}
+
 const nextConfig: NextConfig = {
   // Required for Docker standalone builds — reduces image 500MB → ~150MB
   output: "standalone",
 
   images: {
-    remotePatterns: [
-      // Google OAuth avatars
-      { protocol: "https", hostname: "lh3.googleusercontent.com" },
-      // MinIO dev / R2 prod bucket assets
-      {
-        protocol: "http",
-        hostname: "localhost",
-        port: "9000",
-        pathname: "/brandblitz/**",
-      },
-      {
-        protocol: "http",
-        hostname: "127.0.0.1",
-        port: "9000",
-        pathname: "/brandblitz/**",
-      },
-      {
-        protocol: "https",
-        hostname: "assets.brandblitz.app",
-        pathname: "/brandblitz/**",
-      },
-    ],
+    remotePatterns: getImageRemotePatterns(),
   },
 
   experimental: {
