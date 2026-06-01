@@ -16,6 +16,7 @@ import {
   calculateBetProfitLoss
 } from "./dashboard-utils";
 import { getRuntimeConfig } from "./runtime-config";
+import { getCurrentBlockHeight } from "./market-utils";
 
 function getStacksNetwork(): StacksNetwork {
   const cfg = getRuntimeConfig();
@@ -84,7 +85,7 @@ async function createUserBet(
   betAmount: number
 ): Promise<UserBet | null> {
   try {
-    const currentBlockHeight = 150000; // Mock current block height
+    const currentBlockHeight = getCurrentBlockHeight();
     
     // Determine market status
     let status: 'active' | 'won' | 'lost' | 'expired' = 'active';
@@ -162,8 +163,10 @@ async function checkIfClaimed(poolId: number, userAddress: string): Promise<bool
       network,
     });
     
-    // Mock implementation - in real app, would check claims map
-    return false;
+    // After claiming, the contract removes the bet record; absence means claimed
+    const betData = cvToValue(result, true);
+    const hasBet = betData && (betData['amount-a'] > 0 || betData['amount-b'] > 0);
+    return !hasBet;
   } catch (error) {
     return false;
   }
