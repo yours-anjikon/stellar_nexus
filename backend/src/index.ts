@@ -92,7 +92,8 @@ app.use(
   }),
 );
 
-app.use(express.json());
+const bodySizeLimit = process.env.MAX_BODY_SIZE || "16kb";
+app.use(express.json({ limit: bodySizeLimit }));
 
 // Add API key authentication middleware (production only)
 if (process.env.NODE_ENV === "production") {
@@ -624,6 +625,17 @@ app.get("/api/leaderboard", (req: Request, res: Response) => {
 
 app.use(
   (err: any, req: Request, res: Response, _next: express.NextFunction) => {
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({
+        success: false,
+        error: {
+          code: "PAYLOAD_TOO_LARGE",
+          message: "Request payload size exceeds the maximum allowed limit",
+          requestId: (req as any).requestId,
+        },
+      });
+    }
+
     if (err.message === "Not allowed by CORS") {
       return res.status(403).json({
         success: false,
