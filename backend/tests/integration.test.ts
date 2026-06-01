@@ -215,9 +215,9 @@ describe("Campaign Lifecycle - Happy Path", () => {
 
     // Verify creation event recorded
     let history = await getCampaignHistory(campaignId);
-    expect(history.data).toHaveLength(1);
-    expect(history.data[0].eventType).toBe("created");
-    expect(history.data[0].actor).toBe(CREATOR_1);
+    expect(history.data.data).toHaveLength(1);
+    expect(history.data.data[0].eventType).toBe("created");
+    expect(history.data.data[0].actor).toBe(CREATOR_1);
 
     // Step 2: FIRST PLEDGE
     const pledge1Res = await addTestPledge(campaignId, CONTRIBUTOR_1, 400);
@@ -240,14 +240,14 @@ describe("Campaign Lifecycle - Happy Path", () => {
 
     // Verify pledge events recorded
     history = await getCampaignHistory(campaignId);
-    expect(history.data).toHaveLength(4); // created + 3 pledges
-    expect(history.data[1].eventType).toBe("pledged");
-    expect(history.data[1].amount).toBe(400);
-    expect(history.data[1].actor).toBe(CONTRIBUTOR_1);
-    expect(history.data[2].eventType).toBe("pledged");
-    expect(history.data[2].amount).toBe(350);
-    expect(history.data[3].eventType).toBe("pledged");
-    expect(history.data[3].amount).toBe(250);
+    expect(history.data.data).toHaveLength(4); // created + 3 pledges
+    expect(history.data.data[1].eventType).toBe("pledged");
+    expect(history.data.data[1].amount).toBe(400);
+    expect(history.data.data[1].actor).toBe(CONTRIBUTOR_1);
+    expect(history.data.data[2].eventType).toBe("pledged");
+    expect(history.data.data[2].amount).toBe(350);
+    expect(history.data.data[3].eventType).toBe("pledged");
+    expect(history.data.data[3].amount).toBe(250);
 
     // Step 5: Wait for deadline (or simulate it)
     // Since we set deadline in the past, campaign should be claimable now
@@ -265,10 +265,10 @@ describe("Campaign Lifecycle - Happy Path", () => {
 
     // Verify claim event recorded
     history = await getCampaignHistory(campaignId);
-    expect(history.data).toHaveLength(5); // created + 3 pledges + claim
-    expect(history.data[4].eventType).toBe("claimed");
-    expect(history.data[4].actor).toBe(CREATOR_1);
-    expect(history.data[4].amount).toBe(1000); // Full pledged amount
+    expect(history.data.data).toHaveLength(5); // created + 3 pledges + claim
+    expect(history.data.data[4].eventType).toBe("claimed");
+    expect(history.data.data[4].actor).toBe(CREATOR_1);
+    expect(history.data.data[4].amount).toBe(1000); // Full pledged amount
 
     // Step 7: NO MORE ACTIONS ALLOWED
     const newPledgeRes = await addTestPledge(campaignId, CONTRIBUTOR_3, 100);
@@ -305,7 +305,7 @@ describe("Campaign Lifecycle - Edge Cases", () => {
 
     // Verify only one claim event
     const history = await getCampaignHistory(campaignId);
-    const claimEvents = history.data.filter((e: any) => e.eventType === "claimed");
+    const claimEvents = history.data.data.filter((e: any) => e.eventType === "claimed");
     expect(claimEvents).toHaveLength(1);
   });
 
@@ -394,7 +394,7 @@ describe("Campaign Lifecycle - Edge Cases", () => {
 
     // Verify refund events
     const history = await getCampaignHistory(campaignId);
-    const refundEvents = history.data.filter((e: any) => e.eventType === "refunded");
+    const refundEvents = history.data.data.filter((e: any) => e.eventType === "refunded");
     expect(refundEvents).toHaveLength(2);
     expect(refundEvents[0].actor).toBe(CONTRIBUTOR_1);
     expect(refundEvents[0].amount).toBe(300);
@@ -459,7 +459,7 @@ describe("Campaign Lifecycle - Authorization & Validation", () => {
 
     // Verify no claim event recorded
     const history = await getCampaignHistory(campaignId);
-    const claimEvents = history.data.filter((e: any) => e.eventType === "claimed");
+    const claimEvents = history.data.data.filter((e: any) => e.eventType === "claimed");
     expect(claimEvents).toHaveLength(0);
   });
 
@@ -621,32 +621,32 @@ describe("Campaign Lifecycle - State Consistency", () => {
 
     // Get full history
     const history = await getCampaignHistory(campaignId);
-    expect(history.data).toHaveLength(5); // created + 3 pledges + claim
+    expect(history.data.data).toHaveLength(5); // created + 3 pledges + claim
 
     // Verify event order and types
-    expect(history.data[0].eventType).toBe("created");
-    expect(history.data[1].eventType).toBe("pledged");
-    expect(history.data[2].eventType).toBe("pledged");
-    expect(history.data[3].eventType).toBe("pledged");
-    expect(history.data[4].eventType).toBe("claimed");
+    expect(history.data.data[0].eventType).toBe("created");
+    expect(history.data.data[1].eventType).toBe("pledged");
+    expect(history.data.data[2].eventType).toBe("pledged");
+    expect(history.data.data[3].eventType).toBe("pledged");
+    expect(history.data.data[4].eventType).toBe("claimed");
 
     // Verify timestamps are in order
-    for (let i = 1; i < history.data.length; i++) {
-      expect(history.data[i].timestamp).toBeGreaterThanOrEqual(history.data[i - 1].timestamp);
+    for (let i = 1; i < history.data.data.length; i++) {
+      expect(history.data.data[i].timestamp).toBeGreaterThanOrEqual(history.data.data[i - 1].timestamp);
     }
 
     // Verify actors
-    expect(history.data[0].actor).toBe(CREATOR_1);
-    expect(history.data[1].actor).toBe(CONTRIBUTOR_1);
-    expect(history.data[2].actor).toBe(CONTRIBUTOR_2);
-    expect(history.data[3].actor).toBe(CONTRIBUTOR_3);
-    expect(history.data[4].actor).toBe(CREATOR_1);
+    expect(history.data.data[0].actor).toBe(CREATOR_1);
+    expect(history.data.data[1].actor).toBe(CONTRIBUTOR_1);
+    expect(history.data.data[2].actor).toBe(CONTRIBUTOR_2);
+    expect(history.data.data[3].actor).toBe(CONTRIBUTOR_3);
+    expect(history.data.data[4].actor).toBe(CREATOR_1);
 
     // Verify amounts
-    expect(history.data[1].amount).toBe(300);
-    expect(history.data[2].amount).toBe(400);
-    expect(history.data[3].amount).toBe(300);
-    expect(history.data[4].amount).toBe(1000); // Total claimed
+    expect(history.data.data[1].amount).toBe(300);
+    expect(history.data.data[2].amount).toBe(400);
+    expect(history.data.data[3].amount).toBe(300);
+    expect(history.data.data[4].amount).toBe(1000); // Total claimed
   });
 
   it("should handle multiple independent campaigns in parallel", async () => {
@@ -695,8 +695,8 @@ describe("Campaign Lifecycle - State Consistency", () => {
     const history1 = await getCampaignHistory(campaign1Id);
     const history2 = await getCampaignHistory(campaign2Id);
 
-    expect(history1.data).toHaveLength(3); // created + 1 pledge + claim
-    expect(history2.data).toHaveLength(4); // created + 2 pledges + claim
+    expect(history1.data.data).toHaveLength(3); // created + 1 pledge + claim
+    expect(history2.data.data).toHaveLength(4); // created + 2 pledges + claim
   });
 });
 
