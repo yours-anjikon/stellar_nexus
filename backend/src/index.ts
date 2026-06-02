@@ -582,20 +582,18 @@ app.use((err: any, req: Request, res: Response, _next: express.NextFunction) => 
     },
   };
 
-    const statusCode =
-      err instanceof AppError ? err.statusCode : (err.statusCode ?? 500);
-    const code =
-      err instanceof AppError
-        ? err.code
-        : (err.code ?? "INTERNAL_SERVER_ERROR");
-    const response: ApiErrorResponse = {
-      success: false,
-      error: {
-        code,
-        message: err.message || "An unexpected error occurred",
-        requestId: (req as RequestWithId).requestId,
-      },
-    };
+  logError(
+    err,
+    {
+      event: 'request_error',
+      requestId: (req as RequestWithId).requestId,
+      method: req.method,
+      path: req.originalUrl || req.path,
+      status: statusCode,
+      code,
+    },
+    config.logLevel,
+  );
 
   logError(
     err,
