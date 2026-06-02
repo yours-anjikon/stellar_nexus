@@ -1,5 +1,4 @@
-import { z } from 'zod';
-import { config } from '../config';
+
 
 export const STELLAR_ACCOUNT_REGEX = /^G[A-Z2-7]{55}$/;
 export const ASSET_CODE_REGEX = /^[A-Za-z0-9]{1,12}$/;
@@ -16,8 +15,7 @@ export const stellarAccountIdSchema = z
   .trim()
   .regex(
     STELLAR_ACCOUNT_REGEX,
-    'Must be a valid Stellar account ID (starts with G and is exactly 56 characters).',
-  );
+
 
 export const assetCodeSchema = z
   .string()
