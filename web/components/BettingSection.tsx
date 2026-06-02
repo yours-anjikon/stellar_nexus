@@ -1,4 +1,6 @@
 'use client';
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('BettingSection');
 
 import { useState } from 'react';
 import { Loader2, Wallet, AlertCircle } from 'lucide-react';
@@ -98,7 +100,7 @@ export default function BettingSection({ pool, poolId, onBetSuccess }: BettingSe
             setFeePrompt(null);
             onBetSuccess?.(outcome, amountStroops);
         } catch (error) {
-            console.error('[BettingSection] Bet transaction failed:', error);
+            log.error('[BettingSection] Bet transaction failed:', error);
             showToast(
                 `Failed to place bet: ${error instanceof Error ? error.message : 'Unknown error'}`,
                 'error'

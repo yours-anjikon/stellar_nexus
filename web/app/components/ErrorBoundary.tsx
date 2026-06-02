@@ -1,4 +1,6 @@
 'use client';
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('ErrorBoundary');
 
 import { Component, ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
@@ -24,7 +26,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: any) {
-        console.error('Wallet connection error boundary caught an error:', error, errorInfo);
+        log.error('Wallet connection error boundary caught an error:', error, errorInfo);
     }
 
     render() {
