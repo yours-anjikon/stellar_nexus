@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
+﻿import { FormEvent, useEffect, useState } from "react";
+import { CampaignImage } from "./CampaignImage";
 import { MousePointer2 } from "lucide-react";
 import { AppConfig, Campaign } from "../types/campaign";
 import { ContributorSummary } from "./ContributorSummary";
@@ -308,13 +309,7 @@ export function CampaignDetailPanel({
       ) : null}
 
       {activeCampaign.metadata?.imageUrl ? (
-        <div className="campaign-image-container">
-          <img
-            src={activeCampaign.metadata.imageUrl}
-            alt={activeCampaign.title}
-            className="campaign-image"
-          />
-        </div>
+        <CampaignImage url={activeCampaign.metadata.imageUrl} alt={activeCampaign.title} />
       ) : null}
 
       {activeCampaign.metadata?.externalLink ? (
