@@ -162,19 +162,27 @@ export async function buildAndSendTx(
     const contract = new Contract(contractId);
     const operation = contract.call(method, ...args);
 
-    // 3. Build with a minimal placeholder fee — prepareTransaction will replace
-    //    this with the exact simulated resource fee. Using a placeholder avoids
-    //    the old bug where "10000000" stroops (1 XLM) showed in Freighter as the fee.
+    // 3. Build with a generous INCLUSION fee BEFORE preparing.
+    //    Soroban fees = inclusion fee (set here) + resource fee (added by
+    //    prepareTransaction). prepareTransaction does NOT lower the inclusion
+    //    fee we provide — it only adds the resource fee on top. Setting a
+    //    healthy inclusion fee here gives headroom so a brief network fee spike
+    //    between simulate and submit doesn't cause `txInsufficientFee` (-9).
+    //    1_000_000 stroops (0.1 XLM) inclusion is ample on Soroban where the
+    //    real cost is dominated by the resource fee; the user still only pays
+    //    actual usage, this is just the max cap.
+    const INCLUSION_FEE = "1000000"; // 0.1 XLM inclusion cap (headroom, not actual cost)
     const tx = new TransactionBuilder(sourceAccount, {
-      fee: "100", // placeholder — overwritten by prepareTransaction
+      fee: INCLUSION_FEE,
       networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(operation)
       .setTimeout(300)
       .build();
 
-    // 4. Simulate + prepare — this sets the exact resource fee based on actual
-    //    instruction count. The fee in the prepared tx is what Freighter shows.
+    // 4. Simulate + prepare — adds the exact resource fee on top of the
+    //    inclusion fee above, and embeds the footprint. We sign this directly
+    //    so the Soroban resource data is preserved (cloning drops it).
     let prepared;
     try {
       prepared = await server.prepareTransaction(tx);
@@ -187,12 +195,10 @@ export async function buildAndSendTx(
       };
     }
 
-    // 5. prepareTransaction already sets the exact simulated resource fee on the tx.
-    //    We read it here so we can set the fee bump cap proportionally.
+    // 5. Read the prepared total fee (inclusion + resource) for the fee-bump cap.
     const preparedFee = parseInt(prepared.fee, 10);
 
-    // 6. Sign the prepared transaction — Freighter will now show the real fee,
-    //    not a hardcoded worst-case number.
+    // 6. Sign the prepared transaction (footprint + resource fee intact).
     const txXdr = prepared.toXDR();
     let signedXdr: string;
     try {
