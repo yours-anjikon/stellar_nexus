@@ -3,7 +3,7 @@ import {
   isConnected,
   requestAccess,
   signTransaction,
-} from "@stellar/freighter-api";
+} from '@stellar/freighter-api';
 import {
   Address,
   BASE_FEE,
@@ -11,13 +11,13 @@ import {
   TransactionBuilder,
   nativeToScVal,
   rpc,
-} from "@stellar/stellar-sdk";
-import { AppConfig, PledgeTransactionResult, WalletConnection } from "../types/campaign";
+} from '@stellar/stellar-sdk';
+import { AppConfig, PledgeTransactionResult, WalletConnection } from '../types/campaign';
 
 type AppErrorLike = Error & { code?: string };
 
-const TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
-const MAINNET_PASSPHRASE = "Public Global Stellar Network ; September 2015";
+const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+const MAINNET_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
 
 function buildError(code: string, message: string): AppErrorLike {
   const error = new Error(message) as AppErrorLike;
@@ -29,27 +29,27 @@ function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
-  if (typeof error === "string" && error.trim().length > 0) {
+  if (typeof error === 'string' && error.trim().length > 0) {
     return error;
   }
   return fallback;
 }
 
 function getRpcServer(rpcUrl: string): rpc.Server {
-  return new rpc.Server(rpcUrl, { allowHttp: rpcUrl.startsWith("http://") });
+  return new rpc.Server(rpcUrl, { allowHttp: rpcUrl.startsWith('http://') });
 }
 
 function networkLabel(passphrase: string | undefined): string {
   if (!passphrase) {
-    return "unknown network";
+    return 'unknown network';
   }
   if (passphrase === TESTNET_PASSPHRASE) {
-    return "Stellar Testnet";
+    return 'Stellar Testnet';
   }
   if (passphrase === MAINNET_PASSPHRASE) {
-    return "Stellar Mainnet";
+    return 'Stellar Mainnet';
   }
-  return "the configured network";
+  return 'the configured network';
 }
 
 function sleep(ms: number): Promise<void> {
@@ -90,10 +90,10 @@ function estimateFeeFromTransaction(transaction: { fee: string }): EstimatedFee 
 
 export function amountToContractUnits(amount: number, decimals: number): bigint {
   if (!Number.isFinite(amount) || amount <= 0) {
-    throw buildError("INVALID_AMOUNT", "Pledge amount must be greater than zero.");
+    throw buildError('INVALID_AMOUNT', 'Pledge amount must be greater than zero.');
   }
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 12) {
-    throw buildError("INVALID_DECIMALS", "Invalid contract amount decimals configuration.");
+    throw buildError('INVALID_DECIMALS', 'Invalid contract amount decimals configuration.');
   }
 
   const factor = 10 ** decimals;
@@ -101,8 +101,8 @@ export function amountToContractUnits(amount: number, decimals: number): bigint 
   const rounded = Math.round(scaled);
   if (Math.abs(scaled - rounded) > 1e-8) {
     throw buildError(
-      "INVALID_AMOUNT_PRECISION",
-      `Amount must use no more than ${decimals} decimal place${decimals === 1 ? "" : "s"}.`,
+      'INVALID_AMOUNT_PRECISION',
+      `Amount must use no more than ${decimals} decimal place${decimals === 1 ? '' : 's'}.`,
     );
   }
 
@@ -115,8 +115,8 @@ export async function connectFreighterWallet(
   const connected = await isConnected();
   if (!connected) {
     throw buildError(
-      "FREIGHTER_UNAVAILABLE",
-      "Freighter was not detected. Install or unlock the extension and try again.",
+      'FREIGHTER_UNAVAILABLE',
+      'Freighter was not detected. Install or unlock the extension and try again.',
     );
   }
 
@@ -125,8 +125,8 @@ export async function connectFreighterWallet(
     publicKey = await requestAccess();
   } catch (error) {
     throw buildError(
-      "FREIGHTER_ACCESS_DENIED",
-      getErrorMessage(error, "Freighter access was rejected."),
+      'FREIGHTER_ACCESS_DENIED',
+      getErrorMessage(error, 'Freighter access was rejected.'),
     );
   }
 
@@ -147,12 +147,9 @@ export async function connectFreighterWallet(
     details = undefined;
   }
 
-  if (
-    details?.networkPassphrase &&
-    details.networkPassphrase !== expectedNetworkPassphrase
-  ) {
+  if (details?.networkPassphrase && details.networkPassphrase !== expectedNetworkPassphrase) {
     throw buildError(
-      "FREIGHTER_NETWORK_MISMATCH",
+      'FREIGHTER_NETWORK_MISMATCH',
       `Freighter is connected to ${networkLabel(details.networkPassphrase)}, but this app expects ${networkLabel(expectedNetworkPassphrase)}.`,
     );
   }
@@ -178,7 +175,7 @@ async function waitForTransaction(
     }
     if (result.status === rpc.Api.GetTransactionStatus.FAILED) {
       throw buildError(
-        "TRANSACTION_FAILED",
+        'TRANSACTION_FAILED',
         `The network rejected transaction ${transactionHash}.`,
       );
     }
@@ -186,7 +183,7 @@ async function waitForTransaction(
   }
 
   throw buildError(
-    "TRANSACTION_TIMEOUT",
+    'TRANSACTION_TIMEOUT',
     `Transaction ${transactionHash} was submitted but did not confirm before the UI timeout.`,
   );
 }
@@ -208,22 +205,22 @@ export async function submitFreighterClaim(params: {
 
   if (!config.contractId || !config.sorobanRpcUrl) {
     throw buildError(
-      "CONFIG_MISSING",
-      "Wallet signing is not configured yet. Set CONTRACT_ID and SOROBAN_RPC_URL on the backend.",
+      'CONFIG_MISSING',
+      'Wallet signing is not configured yet. Set CONTRACT_ID and SOROBAN_RPC_URL on the backend.',
     );
   }
 
   const server = getRpcServer(config.sorobanRpcUrl);
   const sourceAccount = await server.getAccount(creator).catch((error) => {
     throw buildError(
-      "SOURCE_ACCOUNT_LOAD_FAILED",
-      getErrorMessage(error, "Unable to load the creator account from Soroban RPC."),
+      'SOURCE_ACCOUNT_LOAD_FAILED',
+      getErrorMessage(error, 'Unable to load the creator account from Soroban RPC.'),
     );
   });
 
   const operation = new Contract(config.contractId).call(
-    "claim",
-    nativeToScVal(BigInt(campaignId), { type: "u64" }),
+    'claim',
+    nativeToScVal(BigInt(campaignId), { type: 'u64' }),
     Address.fromString(creator).toScVal(),
   );
 
@@ -237,38 +234,38 @@ export async function submitFreighterClaim(params: {
 
   const simulation = await server.simulateTransaction(transaction).catch((error) => {
     throw buildError(
-      "SIMULATION_FAILED",
-      getErrorMessage(error, "Unable to simulate the claim transaction."),
+      'SIMULATION_FAILED',
+      getErrorMessage(error, 'Unable to simulate the claim transaction.'),
     );
   });
 
-  if ("error" in simulation) {
-    throw buildError("SIMULATION_FAILED", `Simulation failed: ${simulation.error}`);
+  if ('error' in simulation) {
+    throw buildError('SIMULATION_FAILED', `Simulation failed: ${simulation.error}`);
   }
 
-  if ("restorePreamble" in simulation) {
+  if ('restorePreamble' in simulation) {
     throw buildError(
-      "STATE_RESTORE_REQUIRED",
-      "The contract state is archived and must be restored before claiming.",
+      'STATE_RESTORE_REQUIRED',
+      'The contract state is archived and must be restored before claiming.',
     );
   }
 
   const preparedTransaction = await server.prepareTransaction(transaction).catch((error) => {
     throw buildError(
-      "SIMULATION_PREPARE_FAILED",
-      getErrorMessage(error, "Failed to prepare the simulated claim transaction."),
+      'SIMULATION_PREPARE_FAILED',
+      getErrorMessage(error, 'Failed to prepare the simulated claim transaction.'),
     );
   });
 
   if (params.onPreview) {
     const isApproved = await params.onPreview({
-      operation: "claim",
+      operation: 'claim',
       contract: config.contractId,
       xdr: preparedTransaction.toXDR(),
       estimatedFee: estimateFeeFromTransaction(preparedTransaction) ?? undefined,
     });
     if (!isApproved) {
-      throw buildError("USER_CANCELLED", "User cancelled the transaction from the preview panel.");
+      throw buildError('USER_CANCELLED', 'User cancelled the transaction from the preview panel.');
     }
   }
 
@@ -280,34 +277,34 @@ export async function submitFreighterClaim(params: {
     });
   } catch (error) {
     throw buildError(
-      "SIGNING_FAILED",
-      getErrorMessage(error, "Freighter rejected or failed to sign the claim transaction."),
+      'SIGNING_FAILED',
+      getErrorMessage(error, 'Freighter rejected or failed to sign the claim transaction.'),
     );
   }
 
   if (!signedXdr) {
-    throw buildError("SIGNING_FAILED", "Freighter did not return a signed transaction.");
+    throw buildError('SIGNING_FAILED', 'Freighter did not return a signed transaction.');
   }
 
   const signedTransaction = TransactionBuilder.fromXDR(signedXdr, config.networkPassphrase);
   const sendResult = await server.sendTransaction(signedTransaction).catch((error) => {
     throw buildError(
-      "SUBMISSION_FAILED",
-      getErrorMessage(error, "Failed to submit the signed claim transaction to Soroban RPC."),
+      'SUBMISSION_FAILED',
+      getErrorMessage(error, 'Failed to submit the signed claim transaction to Soroban RPC.'),
     );
   });
 
-  if (sendResult.status === "ERROR") {
+  if (sendResult.status === 'ERROR') {
     throw buildError(
-      "CONTRACT_CALL_FAILED",
+      'CONTRACT_CALL_FAILED',
       `Soroban RPC rejected the claim transaction ${sendResult.hash}.`,
     );
   }
 
-  if (sendResult.status === "TRY_AGAIN_LATER") {
+  if (sendResult.status === 'TRY_AGAIN_LATER') {
     throw buildError(
-      "SUBMISSION_RETRY",
-      "Soroban RPC asked the client to retry claim submission later.",
+      'SUBMISSION_RETRY',
+      'Soroban RPC asked the client to retry claim submission later.',
     );
   }
 
@@ -333,8 +330,8 @@ export async function submitFreighterPledge(params: {
 
   if (!config.contractId || !config.sorobanRpcUrl) {
     throw buildError(
-      "CONFIG_MISSING",
-      "Wallet signing is not configured yet. Set CONTRACT_ID and SOROBAN_RPC_URL on the backend.",
+      'CONFIG_MISSING',
+      'Wallet signing is not configured yet. Set CONTRACT_ID and SOROBAN_RPC_URL on the backend.',
     );
   }
 
@@ -343,22 +340,25 @@ export async function submitFreighterPledge(params: {
   const tokenAddress = config.assetAddresses[assetCode.toUpperCase()];
 
   if (!tokenAddress) {
-    throw buildError("ASSET_NOT_CONFIGURED", `Soroban contract address for ${assetCode} is not configured.`);
+    throw buildError(
+      'ASSET_NOT_CONFIGURED',
+      `Soroban contract address for ${assetCode} is not configured.`,
+    );
   }
 
   const sourceAccount = await server.getAccount(contributor).catch((error) => {
     throw buildError(
-      "SOURCE_ACCOUNT_LOAD_FAILED",
-      getErrorMessage(error, "Unable to load the contributor account from Soroban RPC."),
+      'SOURCE_ACCOUNT_LOAD_FAILED',
+      getErrorMessage(error, 'Unable to load the contributor account from Soroban RPC.'),
     );
   });
 
   const operation = new Contract(config.contractId).call(
-    "contribute",
-    nativeToScVal(BigInt(campaignId), { type: "u64" }),
+    'contribute',
+    nativeToScVal(BigInt(campaignId), { type: 'u64' }),
     Address.fromString(contributor).toScVal(),
     Address.fromString(tokenAddress).toScVal(),
-    nativeToScVal(amountUnits, { type: "i128" }),
+    nativeToScVal(amountUnits, { type: 'i128' }),
   );
 
   const transaction = new TransactionBuilder(sourceAccount, {
@@ -371,35 +371,32 @@ export async function submitFreighterPledge(params: {
 
   const simulation = await server.simulateTransaction(transaction).catch((error) => {
     throw buildError(
-      "SIMULATION_FAILED",
-      getErrorMessage(error, "Unable to simulate the pledge transaction."),
+      'SIMULATION_FAILED',
+      getErrorMessage(error, 'Unable to simulate the pledge transaction.'),
     );
   });
 
-  if ("error" in simulation) {
-    throw buildError(
-      "SIMULATION_FAILED",
-      `Simulation failed: ${simulation.error}`,
-    );
+  if ('error' in simulation) {
+    throw buildError('SIMULATION_FAILED', `Simulation failed: ${simulation.error}`);
   }
 
-  if ("restorePreamble" in simulation) {
+  if ('restorePreamble' in simulation) {
     throw buildError(
-      "STATE_RESTORE_REQUIRED",
-      "The contract state is archived and must be restored before pledging.",
+      'STATE_RESTORE_REQUIRED',
+      'The contract state is archived and must be restored before pledging.',
     );
   }
 
   const preparedTransaction = await server.prepareTransaction(transaction).catch((error) => {
     throw buildError(
-      "SIMULATION_PREPARE_FAILED",
-      getErrorMessage(error, "Failed to prepare the simulated transaction."),
+      'SIMULATION_PREPARE_FAILED',
+      getErrorMessage(error, 'Failed to prepare the simulated transaction.'),
     );
   });
 
   if (params.onPreview) {
     const isApproved = await params.onPreview({
-      operation: "contribute",
+      operation: 'contribute',
       amount: params.amount,
       assetCode: params.assetCode,
       contract: config.contractId,
@@ -407,7 +404,7 @@ export async function submitFreighterPledge(params: {
       estimatedFee: estimateFeeFromTransaction(preparedTransaction) ?? undefined,
     });
     if (!isApproved) {
-      throw buildError("USER_CANCELLED", "User cancelled the transaction from the preview panel.");
+      throw buildError('USER_CANCELLED', 'User cancelled the transaction from the preview panel.');
     }
   }
 
@@ -419,47 +416,42 @@ export async function submitFreighterPledge(params: {
     });
   } catch (error) {
     throw buildError(
-      "SIGNING_FAILED",
-      getErrorMessage(error, "Freighter rejected or failed to sign the transaction."),
+      'SIGNING_FAILED',
+      getErrorMessage(error, 'Freighter rejected or failed to sign the transaction.'),
     );
   }
 
   if (!signedXdr) {
-    throw buildError("SIGNING_FAILED", "Freighter did not return a signed transaction.");
+    throw buildError('SIGNING_FAILED', 'Freighter did not return a signed transaction.');
   }
 
-  const signedTransaction = TransactionBuilder.fromXDR(
-    signedXdr,
-    config.networkPassphrase,
-  );
+  const signedTransaction = TransactionBuilder.fromXDR(signedXdr, config.networkPassphrase);
   const sendResult = await server.sendTransaction(signedTransaction).catch((error) => {
     throw buildError(
-      "SUBMISSION_FAILED",
-      getErrorMessage(error, "Failed to submit the signed transaction to Soroban RPC."),
+      'SUBMISSION_FAILED',
+      getErrorMessage(error, 'Failed to submit the signed transaction to Soroban RPC.'),
     );
   });
 
-  if (sendResult.status === "ERROR") {
+  if (sendResult.status === 'ERROR') {
     throw buildError(
-      "SUBMISSION_FAILED",
+      'SUBMISSION_FAILED',
       `Soroban RPC rejected the transaction ${sendResult.hash}.`,
     );
   }
 
-  if (sendResult.status === "TRY_AGAIN_LATER") {
+  if (sendResult.status === 'TRY_AGAIN_LATER') {
     throw buildError(
-      "SUBMISSION_RETRY",
-      "Soroban RPC asked the client to retry transaction submission later.",
+      'SUBMISSION_RETRY',
+      'Soroban RPC asked the client to retry transaction submission later.',
     );
   }
 
   return waitForTransaction(server, sendResult.hash);
 }
 
-export function watchFreighterAccount(
-  onChange: (address: string) => void,
-): () => void {
-  let lastAddress = "";
+export function watchFreighterAccount(onChange: (address: string) => void): () => void {
+  let lastAddress = '';
   const id = window.setInterval(async () => {
     try {
       const address = await requestAccess();
@@ -469,9 +461,9 @@ export function watchFreighterAccount(
       }
     } catch {
       // extension unavailable or locked — treat as disconnected
-      if (lastAddress !== "") {
-        lastAddress = "";
-        onChange("");
+      if (lastAddress !== '') {
+        lastAddress = '';
+        onChange('');
       }
     }
   }, 2000);

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import "./TransactionPreviewModal.css";
+import { useState } from 'react';
+import './TransactionPreviewModal.css';
 
 export interface TransactionPreviewData {
   operation: string;
@@ -33,7 +33,7 @@ export function TransactionPreviewModal({
           <p className="muted">Review the operation details before signing.</p>
         </div>
 
-        <div className="detail-grid" style={{ marginBottom: "24px" }}>
+        <div className="detail-grid" style={{ marginBottom: '24px' }}>
           <article className="detail-stat">
             <span>Operation</span>
             <strong>{preview.operation}</strong>
@@ -44,9 +44,9 @@ export function TransactionPreviewModal({
               <strong>{preview.amount}</strong>
             </article>
           )}
-          <article className="detail-stat" style={{ gridColumn: "1 / -1" }}>
+          <article className="detail-stat" style={{ gridColumn: '1 / -1' }}>
             <span>Target Contract</span>
-            <strong className="mono" style={{ wordBreak: "break-all" }}>
+            <strong className="mono" style={{ wordBreak: 'break-all' }}>
               {preview.contract}
             </strong>
           </article>
@@ -78,14 +78,10 @@ export function TransactionPreviewModal({
             <span>Show raw XDR</span>
           </label>
 
-          {showXdr && (
-            <div className="xdr-content mono">
-              {preview.xdr}
-            </div>
-          )}
+          {showXdr && <div className="xdr-content mono">{preview.xdr}</div>}
         </div>
 
-        <div className="action-row" style={{ marginTop: "32px", justifyContent: "flex-end" }}>
+        <div className="action-row" style={{ marginTop: '32px', justifyContent: 'flex-end' }}>
           <button className="btn-ghost" type="button" onClick={onCancel}>
             Cancel
           </button>
