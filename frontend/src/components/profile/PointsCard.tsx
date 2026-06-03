@@ -3,7 +3,8 @@ import { FiAward, FiTrendingUp } from "react-icons/fi";
 
 interface PointsCardProps {
   points: number;
-  rank: number;
+  /** Win rate as a percentage (0–100). Shown under the points total. */
+  winRate: number;
   totalBets?: number;
   wonBets?: number;
 }
@@ -14,7 +15,7 @@ function safe(n: number | undefined | null): number {
   return n;
 }
 
-export default function PointsCard({ points, rank, totalBets, wonBets }: PointsCardProps) {
+export default function PointsCard({ points, winRate, totalBets, wonBets }: PointsCardProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-primary-500/20 bg-gradient-to-br from-primary-500/10 via-surface-card to-surface-card p-6">
       {/* Glow accent */}
@@ -30,7 +31,7 @@ export default function PointsCard({ points, rank, totalBets, wonBets }: PointsC
             {safe(points).toLocaleString()}
           </p>
           <p className="text-sm text-primary-400 mt-1 font-medium">
-            Rank #{safe(rank)}
+            {safe(winRate).toFixed(0)}% win rate
           </p>
         </div>
 

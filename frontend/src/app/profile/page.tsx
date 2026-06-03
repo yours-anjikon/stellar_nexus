@@ -110,6 +110,21 @@ export default function ProfilePage() {
   const safe = (n: number | undefined | null): number =>
     n == null || Number.isNaN(n) ? 0 : n;
 
+  // Leaderboard stats (points / won / lost) only register once a market is
+  // RESOLVED and the user CLAIMS — that's when the contract awards points.
+  // Until then the user's actual on-chain bets live in the `bets` array we
+  // already fetched. Derive real activity from it so a user who has placed a
+  // bet sees their activity immediately, instead of an all-zero profile.
+  const pendingBets = bets.filter(
+    (b) => !b.market.resolved && !b.market.cancelled
+  ).length;
+  const settledWon = safe(stats?.wonBets);
+  const settledLost = safe(stats?.lostBets);
+  // Total bets the user has actually placed = all markets they have a bet in.
+  // Fall back to the leaderboard total if the bet scan hasn't loaded yet.
+  const totalBetsPlaced = Math.max(bets.length, safe(stats?.totalBets));
+  const totalStaked = bets.reduce((sum, b) => sum + safe(b.bet.amount), 0);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
       {/* Header */}
@@ -127,9 +142,9 @@ export default function ProfilePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <PointsCard
             points={safe(stats?.points)}
-            rank={safe(stats?.winRate)}
-            totalBets={safe(stats?.totalBets)}
-            wonBets={safe(stats?.wonBets)}
+            winRate={safe(stats?.winRate)}
+            totalBets={totalBetsPlaced}
+            wonBets={settledWon}
           />
           <TokenBalance
             balance={safe(tokenData?.balance ?? profile?.tokenBalance)}
@@ -142,19 +157,24 @@ export default function ProfilePage() {
               <span className="text-sm text-slate-400">Bets</span>
             </div>
             <p className="text-2xl font-heading font-bold">
-              {safe(stats?.totalBets)}
+              {totalBetsPlaced}
             </p>
             <div className="flex gap-3 mt-1 text-xs">
               <span className="text-accent-green">
-                {safe(stats?.wonBets)} won
+                {settledWon} won
               </span>
               <span className="text-accent-red">
-                {safe(stats?.lostBets)} lost
+                {settledLost} lost
               </span>
               <span className="text-slate-500">
-                {bets.filter((b) => !b.market.resolved && !b.market.cancelled).length} pending
+                {pendingBets} pending
               </span>
             </div>
+            {totalStaked > 0 && (
+              <p className="text-xs text-slate-500 mt-1">
+                {totalStaked.toFixed(2)} XLM staked
+              </p>
+            )}
           </div>
           {/* Referral earnings card */}
           <div className="card">
