@@ -48,36 +48,44 @@ async function buildFromMarketBettors(): Promise<PlayerStats[]> {
     const markets = await getMarkets();
     if (markets.length === 0) return [];
 
-    // Collect unique addresses across all markets
-    const addressSet = new Set<string>();
+    // Count, per address, how many markets they have actually bet in. The
+    // leaderboard contract only records won/lost/points on CLAIM (after a market
+    // resolves), so a user who has placed bets but not yet claimed has 0 there.
+    // We derive their real activity (total bets) from the on-chain bettor index.
+    const betCount = new Map<string, number>();
     const bettorResults = await Promise.allSettled(
       markets.map((m) => getMarketBettors(m.id))
     );
     for (const r of bettorResults) {
       if (r.status === "fulfilled") {
-        for (const addr of r.value) addressSet.add(addr);
+        for (const addr of r.value) {
+          betCount.set(addr, (betCount.get(addr) ?? 0) + 1);
+        }
       }
     }
-    if (addressSet.size === 0) return [];
+    if (betCount.size === 0) return [];
 
-    // For each unique bettor, fetch their leaderboard stats + display name
-    const addresses = Array.from(addressSet);
+    const addresses = Array.from(betCount.keys());
     const results = await Promise.allSettled(
       addresses.map(async (addr) => {
         const [stats, name] = await Promise.all([
           getStats(addr),
           getDisplayName(addr).catch(() => ""),
         ]);
+        // Real total bets = markets the user has a bet in (from the index),
+        // never less than what the leaderboard has settled.
+        const placedBets = betCount.get(addr) ?? 0;
+        const settledBets = stats?.totalBets ?? 0;
+        const totalBets = Math.max(placedBets, settledBets);
+        const wonBets = stats?.wonBets ?? 0;
         return {
           address: addr,
           displayName: name || "",
           points: stats?.points ?? 0,
-          totalBets: stats?.totalBets ?? 0,
-          wonBets: stats?.wonBets ?? 0,
+          totalBets,
+          wonBets,
           lostBets: stats?.lostBets ?? 0,
-          winRate: stats && stats.totalBets > 0
-            ? (stats.wonBets / stats.totalBets) * 100
-            : 0,
+          winRate: settledBets > 0 ? (wonBets / settledBets) * 100 : 0,
         } satisfies PlayerStats;
       })
     );
@@ -107,13 +115,39 @@ export function useLeaderboard(
     if (!silent) setLoading(true);
     setError(null);
     try {
-      let players = await getTopPlayers(50);
+      // MERGE two sources so EVERY participant shows, not just claimers:
+      //   1. on-chain top players — users who have claimed (have points/wins),
+      //   2. market bettors — users who have placed bets but not yet claimed
+      //      (the leaderboard contract has no points/stats for them yet).
+      // The contract only records points/won/lost on claim, so without (2) a
+      // brand-new bettor would be invisible and their total-bet count would be 0.
+      const [topPlayers, bettorPlayers] = await Promise.all([
+        getTopPlayers(50),
+        buildFromMarketBettors(),
+      ]);
 
-      // Fallback: if the onchain leaderboard is empty, construct from
-      // market bettors (covers the period before any claim/bonus awards).
-      if (players.length === 0) {
-        players = await buildFromMarketBettors();
+      // Dedupe by address. Prefer the entry with more information: keep the
+      // higher points (from the top list) AND the higher totalBets (from the
+      // bettor index), so a claimer who also has pending bets shows both.
+      const byAddr = new Map<string, PlayerStats>();
+      for (const p of bettorPlayers) byAddr.set(p.address, p);
+      for (const p of topPlayers) {
+        const existing = byAddr.get(p.address);
+        if (!existing) {
+          byAddr.set(p.address, p);
+        } else {
+          byAddr.set(p.address, {
+            ...existing,
+            points: Math.max(existing.points, p.points),
+            totalBets: Math.max(existing.totalBets, p.totalBets),
+            wonBets: Math.max(existing.wonBets, p.wonBets),
+            lostBets: Math.max(existing.lostBets, p.lostBets),
+            winRate: p.winRate || existing.winRate,
+            displayName: existing.displayName || p.displayName,
+          });
+        }
       }
+      const players = Array.from(byAddr.values());
 
       if (!mountedRef.current) return;
       // Persist assembled leaderboard for instant stale-seed next time
