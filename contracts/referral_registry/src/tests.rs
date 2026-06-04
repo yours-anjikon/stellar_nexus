@@ -53,7 +53,11 @@ fn setup() -> TestSetup {
     // Initialize Leaderboard: market + referral as authorized callers
     leaderboard_client.initialize(&admin, &market, &referral_id);
 
-    // Set referral registry as authorized minter on token
+    // Lever G: leaderboard mints the welcome bonus internally now, so it needs
+    // the token address and minter authorization (mirrors mainnet upgrade).
+    leaderboard_client.set_token(&admin, &token_id);
+    token_client.set_minter(&leaderboard_id);
+    // Legacy: referral no longer mints directly, kept harmless.
     token_client.set_minter(&referral_id);
 
     // Register a SAC for native XLM
@@ -381,4 +385,54 @@ fn test_double_init_rejected() {
         &t.leaderboard_id,
         &t.xlm_sac_id,
     );
+}
+
+// ── Lever A: lazy migration — a user stored under the OLD key layout must still
+//    be fully readable after the upgrade (Registered + DisplayName + Referrer). ──
+#[test]
+fn test_legacy_user_still_readable() {
+    let s = setup();
+    let legacy_user = Address::generate(&s.env);
+    let legacy_ref = Address::generate(&s.env);
+
+    // Simulate a pre-upgrade registration by writing the OLD keys directly.
+    s.env.as_contract(&s.referral_id, || {
+        s.env.storage().persistent().set(&DataKey::Registered(legacy_user.clone()), &true);
+        s.env.storage().persistent().set(
+            &DataKey::DisplayName(legacy_user.clone()),
+            &String::from_str(&s.env, "OldTimer"),
+        );
+        s.env.storage().persistent().set(&DataKey::Referrer(legacy_user.clone()), &legacy_ref);
+    });
+
+    // All read paths must resolve via the legacy fallback.
+    assert!(s.client.is_registered(&legacy_user));
+    assert_eq!(s.client.get_display_name(&legacy_user), String::from_str(&s.env, "OldTimer"));
+    assert_eq!(s.client.get_referrer(&legacy_user), Some(legacy_ref.clone()));
+    assert!(s.client.has_referrer(&legacy_user));
+
+    // And a legacy user must NOT be able to double-register under the new scheme.
+    let res = s.client.try_register_referral(
+        &legacy_user,
+        &String::from_str(&s.env, "OldTimer"),
+        &None,
+    );
+    assert!(res.is_err());
+}
+
+// A legacy user with NO referrer (only Registered + DisplayName) reads correctly.
+#[test]
+fn test_legacy_user_without_referrer() {
+    let s = setup();
+    let legacy_user = Address::generate(&s.env);
+    s.env.as_contract(&s.referral_id, || {
+        s.env.storage().persistent().set(&DataKey::Registered(legacy_user.clone()), &true);
+        s.env.storage().persistent().set(
+            &DataKey::DisplayName(legacy_user.clone()),
+            &String::from_str(&s.env, "Solo"),
+        );
+    });
+    assert!(s.client.is_registered(&legacy_user));
+    assert_eq!(s.client.get_referrer(&legacy_user), None);
+    assert!(!s.client.has_referrer(&legacy_user));
 }

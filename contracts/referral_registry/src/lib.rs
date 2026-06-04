@@ -26,14 +26,30 @@ pub enum ReferralError {
 pub enum DataKey {
     Admin,
     MarketContract,
+    // ── Legacy per-user keys (pre-Lever-A) — still READ for users who
+    //    registered before the upgrade. New registrations no longer write these.
     Referrer(Address),
     DisplayName(Address),
+    Registered(Address),
+    // ── Lever A: one packed entry per NEW registrant (display_name + referrer).
+    //    Existence of this key implies "registered". Cuts a first-time
+    //    registration from 3 new entries to 1.
+    Profile(Address),
+    // ReferralCount/Earnings are the REFERRER's counters (a different user),
+    // updated in place — kept as separate keys (not part of the registrant pack).
     ReferralCount(Address),
     ReferralEarnings(Address),
-    Registered(Address),
     TokenContract,
     LeaderboardContract,
     XlmSacContract,
+}
+
+// Lever A: packed registrant profile — one storage slot instead of three.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserProfile {
+    pub display_name: String,
+    pub referrer:     Option<Address>,
 }
 
 #[contract]
@@ -94,10 +110,15 @@ impl ReferralRegistryContract {
                 return Err(ReferralError::SelfReferral);
             }
         }
-        env.storage().persistent().set(&DataKey::Registered(user.clone()), &true);
-        env.storage().persistent().set(&DataKey::DisplayName(user.clone()), &display_name);
+        // Lever A: write ONE packed Profile entry (display_name + referrer)
+        // instead of the three legacy keys (Registered + DisplayName + Referrer).
+        // Existence of Profile(user) is what is_registered() now checks.
+        env.storage().persistent().set(
+            &DataKey::Profile(user.clone()),
+            &UserProfile { display_name, referrer: referrer.clone() },
+        );
+        // The referrer's counter is a DIFFERENT user's entry — update in place.
         if let Some(ref ref_addr) = referrer {
-            env.storage().persistent().set(&DataKey::Referrer(user.clone()), ref_addr);
             let count: u32 = env.storage().persistent()
                 .get(&DataKey::ReferralCount(ref_addr.clone())).unwrap_or(0);
             env.storage().persistent()
@@ -108,14 +129,13 @@ impl ReferralRegistryContract {
         let leaderboard: Address = env.storage().instance().get(&DataKey::LeaderboardContract).unwrap();
         let _: Val = env.invoke_contract(
             &leaderboard,
-            &Symbol::new(&env, "add_bonus_pts"),
-            vec![&env, this.clone().into_val(&env), user.clone().into_val(&env), WELCOME_BONUS_POINTS.into_val(&env)],
-        );
-        let token_contract: Address = env.storage().instance().get(&DataKey::TokenContract).unwrap();
-        let _: Val = env.invoke_contract(
-            &token_contract,
-            &Symbol::new(&env, "mint"),
-            vec![&env, this.into_val(&env), user.into_val(&env), WELCOME_BONUS_TOKENS.into_val(&env)],
+            &Symbol::new(&env, "reward_bonus"),
+            vec![&env,
+                this.into_val(&env),
+                user.into_val(&env),
+                WELCOME_BONUS_POINTS.into_val(&env),
+                WELCOME_BONUS_TOKENS.into_val(&env),
+            ],
         );
         Ok(())
     }
@@ -128,7 +148,8 @@ impl ReferralRegistryContract {
     ) -> Result<bool, ReferralError> {
         caller.require_auth();
         Self::require_market_contract(&env, &caller)?;
-        let referrer: Option<Address> = env.storage().persistent().get(&DataKey::Referrer(user.clone()));
+        // Lever A: resolve referrer via packed Profile (new) or legacy key (old).
+        let referrer: Option<Address> = Self::load_profile(&env, &user).and_then(|p| p.referrer);
         match referrer {
             Some(ref_addr) => {
                 let xlm_sac: Address = env.storage().instance().get(&DataKey::XlmSacContract).unwrap();
@@ -159,12 +180,30 @@ impl ReferralRegistryContract {
         }
     }
 
+ 
+    fn load_profile(env: &Env, user: &Address) -> Option<UserProfile> {
+        if let Some(p) = env.storage().persistent()
+            .get::<DataKey, UserProfile>(&DataKey::Profile(user.clone())) {
+            return Some(p);
+        }
+        // Legacy fallback: reconstruct a profile from the old keys.
+        if env.storage().persistent().get::<DataKey, bool>(&DataKey::Registered(user.clone())).unwrap_or(false) {
+            let display_name = env.storage().persistent()
+                .get(&DataKey::DisplayName(user.clone()))
+                .unwrap_or_else(|| String::from_str(env, ""));
+            let referrer = env.storage().persistent().get(&DataKey::Referrer(user.clone()));
+            return Some(UserProfile { display_name, referrer });
+        }
+        None
+    }
+
     pub fn get_referrer(env: Env, user: Address) -> Option<Address> {
-        env.storage().persistent().get(&DataKey::Referrer(user))
+        Self::load_profile(&env, &user).and_then(|p| p.referrer)
     }
 
     pub fn get_display_name(env: Env, user: Address) -> String {
-        env.storage().persistent().get(&DataKey::DisplayName(user))
+        Self::load_profile(&env, &user)
+            .map(|p| p.display_name)
             .unwrap_or_else(|| String::from_str(&env, ""))
     }
 
@@ -177,11 +216,11 @@ impl ReferralRegistryContract {
     }
 
     pub fn has_referrer(env: Env, user: Address) -> bool {
-        env.storage().persistent().has(&DataKey::Referrer(user))
+        Self::get_referrer(env, user).is_some()
     }
 
     pub fn is_registered(env: Env, user: Address) -> bool {
-        env.storage().persistent().get(&DataKey::Registered(user)).unwrap_or(false)
+        Self::load_profile(&env, &user).is_some()
     }
 
     fn require_market_contract(env: &Env, caller: &Address) -> Result<(), ReferralError> {

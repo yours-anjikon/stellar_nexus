@@ -523,14 +523,14 @@ impl PredictionMarketContract {
 
         let _: Val = env.invoke_contract(
             &cfg.leaderboard,
-            &Symbol::new(&env, "add_pts"),
-            vec![&env, this.clone().into_val(&env), user.clone().into_val(&env), points.into_val(&env), real_win.into_val(&env)],
-        );
-
-        let _: Val = env.invoke_contract(
-            &cfg.token,
-            &Symbol::new(&env, "mint"),
-            vec![&env, this.into_val(&env), user.into_val(&env), tokens.into_val(&env)],
+            &Symbol::new(&env, "reward"),
+            vec![&env,
+                this.clone().into_val(&env),
+                user.clone().into_val(&env),
+                points.into_val(&env),
+                tokens.into_val(&env),
+                real_win.into_val(&env),
+            ],
         );
 
         Ok(())
