@@ -580,6 +580,84 @@ def generate_rust_intermediate(visitor: MyceliumCompilerVisitor) -> str:
     return "\n".join(lines)
 
 
+def ensure_stellar_cli() -> str:
+    """
+    Checks if 'stellar' CLI is available in system PATH or downloads it automatically.
+    Returns the path to the stellar binary.
+    """
+    import platform
+    import urllib.request
+    import tarfile
+    
+    # 1. Check system PATH
+    system_stellar = shutil.which("stellar")
+    if system_stellar:
+        return system_stellar
+        
+    # 2. Check local bin directory in the compiler folder
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    local_bin_dir = os.path.join(current_dir, "bin")
+    local_stellar = os.path.join(local_bin_dir, "stellar")
+    if os.path.exists(local_stellar):
+        return local_stellar
+        
+    # 3. Download precompiled binary if missing
+    os.makedirs(local_bin_dir, exist_ok=True)
+    
+    # Detect platform
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    
+    version = "22.0.1"
+    
+    # Map platform/architecture to release files
+    if system == "linux" and "86" in machine: # x86_64
+        filename = f"stellar-cli-{version}-x86_64-unknown-linux-gnu.tar.gz"
+    elif system == "darwin": # macOS
+        if "arm" in machine or "aarch" in machine:
+            filename = f"stellar-cli-{version}-aarch64-apple-darwin.tar.gz"
+        else:
+            filename = f"stellar-cli-{version}-x86_64-apple-darwin.tar.gz"
+    else:
+        print("[Stellar CLI Bootstrapper] Unsupported platform/architecture for auto-download. Using fallback 'stellar'.")
+        return "stellar"
+        
+    url = f"https://github.com/stellar/stellar-cli/releases/download/v{version}/{filename}"
+    
+    print(f"[Stellar CLI Bootstrapper] Downloading stellar-cli v{version} from {url}...")
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = os.path.join(tmpdir, filename)
+            
+            # Download file
+            urllib.request.urlretrieve(url, archive_path)
+            
+            # Extract archive
+            if filename.endswith(".tar.gz"):
+                with tarfile.open(archive_path, "r:gz") as tar:
+                    tar.extractall(path=tmpdir)
+                    
+            # Locate binary inside the extracted contents
+            stellar_bin_name = "stellar"
+            found_path = None
+            for root, dirs, files in os.walk(tmpdir):
+                if stellar_bin_name in files:
+                    found_path = os.path.join(root, stellar_bin_name)
+                    break
+                    
+            if found_path and os.path.exists(found_path):
+                shutil.copy2(found_path, local_stellar)
+                os.chmod(local_stellar, 0o755) # Make executable
+                print(f"[Stellar CLI Bootstrapper] Successfully installed stellar-cli at {local_stellar}")
+                return local_stellar
+            else:
+                raise FileNotFoundError("Could not find 'stellar' binary in extracted archive")
+                
+    except Exception as e:
+        print(f"[Stellar CLI Bootstrapper] Failed to download or install stellar-cli: {e}. Using fallback 'stellar'.")
+        return "stellar"
+
+
 def generate_wasm(visitor: MyceliumCompilerVisitor) -> bytes:
     """
     Generate a valid Soroban-compatible WASM binary from parsed contract AST
@@ -619,8 +697,11 @@ panic = "abort"
         with open(os.path.join(temp_dir, "src", "lib.rs"), "w") as f:
             f.write(rust_code)
             
+        # Ensure stellar-cli is available (auto-download if missing)
+        stellar_bin = ensure_stellar_cli()
+        
         # Run stellar contract build --optimize
-        cmd = ["stellar", "contract", "build", "--manifest-path", os.path.join(temp_dir, "Cargo.toml"), "--optimize"]
+        cmd = [stellar_bin, "contract", "build", "--manifest-path", os.path.join(temp_dir, "Cargo.toml"), "--optimize"]
         
         env = os.environ.copy()
         env["CARGO_TARGET_DIR"] = "/tmp/mycelium_cargo_target"

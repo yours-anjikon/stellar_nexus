@@ -31,6 +31,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def startup_event():
+    import threading
+    try:
+        from mycelium_compiler.codegen import ensure_stellar_cli
+        threading.Thread(target=ensure_stellar_cli, daemon=True).start()
+    except Exception as e:
+        print(f"[Startup] Failed to initiate stellar-cli bootstrapper: {e}")
+
 class CompileRequest(BaseModel):
     filename: str
     source_code: str

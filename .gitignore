@@ -61,3 +61,6 @@ Thumbs.db
 # Firebase Service Keys
 *firebase-key.json
 *-firebase-adminsdk-*.json
+
+# Downloaded compiler binaries
+compiler/mycelium_compiler/bin/
