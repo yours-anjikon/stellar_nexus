@@ -6,7 +6,8 @@ import Link from "next/link";
 import { 
   Folder, FileCode, Play, Cpu, Shield, Key, Plus, 
   Terminal as TermIcon, LogOut, Wallet, Check, AlertTriangle, ExternalLink, RefreshCw,
-  Copy, Download, Cpu as CpuIcon, Database, Activity, Wifi, TerminalSquare, Zap
+  Copy, Download, Cpu as CpuIcon, Database, Activity, Wifi, TerminalSquare, Zap,
+  ArrowRight
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { CONTRACT_TEMPLATES, TEMPLATE_CATEGORIES } from "../../data/contractTemplates";
@@ -1609,161 +1610,124 @@ export default function Playground() {
       {/* ACCESS SHIELD: GitHub Authentication Redirect */}
       {!isAuthenticated ? (
         <div style={{
+          position: "relative",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           width: "100%",
           height: "100%",
           zIndex: 10,
-          background: "#000000"
+          background: "#040405",
+          color: "#ffffff",
+          fontFamily: "var(--font-sans), sans-serif",
+          overflow: "hidden"
         }}>
-          <div className="panel-retro crt-glow" style={{
-            padding: "40px",
+          {/* Subtle grid */}
+          <div className="premium-grid" style={{
+            position: "absolute",
+            top: 0, left: 0, right: 0, bottom: 0,
+            pointerEvents: "none",
+            zIndex: 0
+          }} />
+
+          {/* Glowing background orb */}
+          <div className="glow-orb-cyan" style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "500px",
+            height: "400px",
+            pointerEvents: "none",
+            zIndex: 1
+          }} />
+
+          {/* Glassmorphic Auth Card */}
+          <div style={{
+            position: "relative",
+            zIndex: 2,
+            padding: "48px 40px",
             width: "90%",
-            maxWidth: "520px",
+            maxWidth: "460px",
             textAlign: "center",
-            boxShadow: "0 0 30px rgba(0, 242, 254, 0.2)"
+            background: "rgba(4, 4, 5, 0.75)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: "16px",
+            boxShadow: "0 24px 64px rgba(0, 0, 0, 0.7)"
           }}>
+            {/* Brand logo/icon */}
             <div style={{
               display: "flex",
               justifyContent: "center",
-              marginBottom: "20px",
-              color: "var(--accent-cyan)"
+              marginBottom: "24px"
             }}>
-              <Shield size={64} />
-            </div>
-            
-            <h2 style={{
-              fontSize: "2.5rem",
-              fontWeight: "normal",
-              marginBottom: "10px",
-              letterSpacing: "3px",
-              color: "var(--accent-cyan)"
-            }}>
-              ACCESS SHIELD
-            </h2>
-            
-            <div style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              marginBottom: "25px",
-              borderBottom: "1px solid var(--border-color)",
-              paddingBottom: "15px"
-            }}>
-              RESTRICTED SECTION: AUTH REQUIRED
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "72px",
+                height: "72px",
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid rgba(255, 255, 255, 0.10)",
+                boxShadow: "inset 0 0 12px rgba(255, 255, 255, 0.05)"
+              }}>
+                <Shield size={36} style={{ color: "var(--accent-cyan)" }} />
+              </div>
             </div>
 
+            {/* Header */}
+            <h2 className="font-display" style={{
+              fontSize: "2rem",
+              fontWeight: 800,
+              color: "#ffffff",
+              letterSpacing: "-0.04em",
+              lineHeight: "1.1",
+              marginBottom: "8px"
+            }}>
+              Access Shield
+            </h2>
+            <div style={{
+              fontSize: "0.68rem",
+              fontFamily: "var(--font-mono)",
+              color: "var(--accent-cyan)",
+              textTransform: "uppercase",
+              letterSpacing: "3px",
+              fontWeight: "bold",
+              marginBottom: "20px"
+            }}>
+              Restricted Section: Auth Required
+            </div>
+
+            {/* Description */}
             <p style={{
-              fontSize: "1.2rem",
-              lineHeight: "1.4",
-              marginBottom: "30px",
-              color: "var(--foreground)"
+              fontSize: "0.92rem",
+              lineHeight: "1.65",
+              color: "rgba(255, 255, 255, 0.55)",
+              marginBottom: "36px",
+              fontWeight: 300
             }}>
               Authentication with GitHub is required to synchronize repositories, check AST rules, and compile Python smart contracts to WASM.
             </p>
 
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "15px"
-            }}>
-              <button 
-                onClick={handleOAuthLoginRedirect}
-                className="btn-retro btn-retro-accent"
-                style={{
-                  width: "100%",
-                  fontSize: "1.2rem",
-                  padding: "10px"
-                }}
-              >
-                [ Sign In via GitHub OAuth ]
-              </button>
-              
-              <button 
-                onClick={() => setShowTokenInput(!showTokenInput)}
-                className="btn-retro"
-                style={{
-                  width: "100%",
-                  fontSize: "1rem",
-                  padding: "8px",
-                  borderColor: "var(--border-color)"
-                }}
-              >
-                {showTokenInput ? "[ Hide Token Form ]" : "[ Paste Access Token ]"}
-              </button>
-            </div>
-
-            {showTokenInput && (
-              <div style={{
-                marginTop: "25px",
-                paddingTop: "20px",
-                borderTop: "1px dashed var(--border-color)",
-                textAlign: "left"
-              }}>
-                <label style={{
-                  display: "block",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.75rem",
-                  color: "var(--accent-green)",
-                  marginBottom: "8px"
-                }}>
-                  ENTER FINE-GRAINED ACCESS TOKEN:
-                </label>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <input 
-                    type="password"
-                    value={githubTokenBypass}
-                    onChange={(e) => setGithubTokenBypass(e.target.value)}
-                    placeholder="github_pat_..."
-                    style={{
-                      flex: 1,
-                      background: "#050505",
-                      border: "1px solid var(--border-color)",
-                      color: "var(--accent-green)",
-                      padding: "8px",
-                      fontSize: "0.85rem",
-                      fontFamily: "var(--font-mono)",
-                      outline: "none"
-                    }}
-                  />
-                  <button 
-                    onClick={async () => {
-                      if (githubTokenBypass.trim().startsWith("github_pat_")) {
-                        try {
-                          const res = await fetch(`${API_BASE_URL}/auth/github/callback?code=${githubTokenBypass.trim()}`, {
-                            method: "POST"
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            localStorage.setItem("mycelium_jwt", data.access_token);
-                            localStorage.setItem("mycelium_username", data.username);
-                            localStorage.setItem("mycelium_avatar", data.avatar_url);
-                            setSessionToken(data.access_token);
-                            setUsername(data.username);
-                            setAvatarUrl(data.avatar_url);
-                            setIsAuthenticated(true);
-                            addTerminalLog("success", "Successfully logged in via access token.");
-                          } else {
-                            addTerminalLog("error", "Access token validation failed.");
-                          }
-                        } catch {
-                          addTerminalLog("error", "Error verifying access token.");
-                        }
-                      } else {
-                        toast.error("Invalid GitHub Token format!");
-                      }
-                    }}
-                    className="btn-retro"
-                    style={{ padding: "6px 12px", fontSize: "0.9rem" }}
-                  >
-                    SUBMIT
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Login Button */}
+            <button 
+              onClick={handleOAuthLoginRedirect}
+              className="premium-button-primary"
+              style={{
+                width: "100%",
+                padding: "14px 24px",
+                fontSize: "0.88rem",
+                fontWeight: 600,
+                borderRadius: "8px",
+                boxShadow: "0 4px 20px rgba(255, 255, 255, 0.05)"
+              }}
+            >
+              Sign In via GitHub OAuth
+              <ArrowRight size={16} />
+            </button>
           </div>
         </div>
       ) : (
