@@ -82,33 +82,40 @@ export default function DocsPage() {
       description: "Developer toolbelt for scaffolding projects, compiling Python smart contracts to WASM, and managing Stellar network deployments.",
       icon: <Terminal size={20} />,
       color: "#0096c7", // Cyan
-      overview: "The Mycelium CLI bridges the local development workspace with the Stellar Soroban network. It automates the environment configurations, key management, project template scaffolding, AST compile checking, WebAssembly building, and registration on the decentralised on-chain Hivemind registry.",
+      overview: "The Mycelium CLI bridges the local development workspace with the Stellar Soroban network. A single `pip install mycelium-stellar` ships the CLI, the SDK, the Python→WASM compiler, and the contract-authoring DSL. The CLI handles project scaffolding, encrypted wallet generation, AST validation, WebAssembly compilation, on-chain deployment, registration on the Hive Registry, and running the autonomous agent runtime.",
       installation: {
-        command: "pip install mycelium-cli",
-        description: "Requires Python >= 3.9 and Cargo/Rust installed locally for compilation pipelines."
+        command: "pip install mycelium-stellar",
+        description: "Requires Python >= 3.9. The `compile`/`deploy` commands need the stellar-cli (v27.0.0) and the Rust wasm32 target — Mycelium auto-downloads the stellar CLI on first use. Run `mycelium doctor` to verify your toolchain."
       },
       quickStartCode: {
         filename: "cli_workflow.sh",
         language: "bash",
-        code: `# Initialize a new agent workspace project
-mycelium init my-swarm-agent
-cd my-swarm-agent
+        code: `# 1. Scaffold a new agent project (creates mycelium.toml + contract + agent)
+mycelium init my_agent
+cd my_agent
 
-# Build & compile the Python contract to WebAssembly
+# 2. Generate an encrypted Ed25519 wallet (.mycelium/wallet.json)
+mycelium newwallet
+
+# 3. Fund the wallet from the testnet Friendbot faucet
+mycelium fund
+
+# 4. Validate types/AST, then compile the contract to Soroban WASM
+mycelium check contract.py
 mycelium compile
 
-# Setup cryptographic keypair on Stellar Testnet
-mycelium keys generate dev-wallet
+# 5. Deploy to testnet and register the agent on the Hive Registry
+mycelium deploy --network testnet
+mycelium register
 
-# Deploy contract to Stellar Testnet ledger
-mycelium deploy --network testnet --key dev-wallet
-
-# Register agent node in the central registry
-mycelium register --name my_swarm_agent --endpoint https://agent.mycelium.org`
+# 6. Inspect everything, then run / dry-run the agent
+mycelium status
+mycelium test          # simulate every on-chain action, no signing/spend
+mycelium run           # start the live agent runtime`
       },
       details: [
         {
-          sectionTitle: "CLI Command Reference Table",
+          sectionTitle: "CLI Command Reference",
           content: (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", color: "rgba(255,255,255,0.7)" }}>
@@ -120,89 +127,120 @@ mycelium register --name my_swarm_agent --endpoint https://agent.mycelium.org`
                   </tr>
                 </thead>
                 <tbody>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)" }}>init</td>
-                    <td style={{ padding: "10px 12px" }}>Scaffolds a new template-based agent workspace with boilerplate code.</td>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)" }}>&lt;project_name&gt;</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)" }}>compile</td>
-                    <td style={{ padding: "10px 12px" }}>Transpiles local Python smart contracts into Rust & builds WASM binaries.</td>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)" }}>--release</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)" }}>deploy</td>
-                    <td style={{ padding: "10px 12px" }}>Simulates transactions, uploads WASM binaries, and deploys contract to ledger.</td>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)" }}>--network, --key</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)" }}>register</td>
-                    <td style={{ padding: "10px 12px" }}>Invokes the Hive Registry contract on-chain to directory-bind name & URI.</td>
-                    <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)" }}>--name, --endpoint</td>
-                  </tr>
+                  {[
+                    ["init", "Scaffold a new agent project (mycelium.toml, contract, agent runtime).", "<project_name>"],
+                    ["newwallet", "Generate an encrypted Ed25519 wallet.", "--path, --force"],
+                    ["fund", "Top up a testnet wallet from the Friendbot faucet.", "—"],
+                    ["check", "Validate a contract's AST and types without compiling.", "<file>"],
+                    ["compile", "Compile a Python contract to Soroban WASM.", "-o, --optimize"],
+                    ["deploy", "Upload WASM and deploy the contract to Stellar/Soroban.", "--network, --wallet"],
+                    ["register", "Register the agent's unique name on the Hive Registry.", "--network, --registry"],
+                    ["agents", "Discover every agent on the Hive Registry (read-only, no wallet).", "--start-ledger, --no-resolve"],
+                    ["resolve", "Resolve a single agent name to its registry entry (read-only).", "<name>"],
+                    ["call", "Invoke a deployed contract function (read-only by default).", "--contract, --fn, --send"],
+                    ["pay", "Send an XLM payment to a registry name or address (M2M).", "<to> <amount>"],
+                    ["events", "Show or stream (--follow) a contract's on-chain events.", "--contract, --follow"],
+                    ["status", "Wallet, balance, network, deploy and registry state in one view.", "—"],
+                    ["run", "Run the project's agent (reads contract id + network from toml).", "—"],
+                    ["test", "Dry-run the agent: simulate on-chain actions without signing.", "—"],
+                    ["doctor", "Verify the toolchain (stellar-cli, rust+wasm, RPC) and print fixes.", "—"],
+                  ].map(([cmd, desc, args]) => (
+                    <tr key={cmd} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)", verticalAlign: "top" }}>{cmd}</td>
+                      <td style={{ padding: "10px 12px" }}>{desc}</td>
+                      <td style={{ padding: "10px 0", fontFamily: "var(--font-mono)", verticalAlign: "top" }}>{args}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )
         },
         {
-          sectionTitle: "Environment Setup Variables",
-          content: "The CLI detects configurations from the local `.env` or system variables. Make sure your environment contains: STELLAR_RPC_URL (e.g. https://soroban-testnet.stellar.org) and STELLAR_PASSPHRASE for the target testnet, to avoid manually specifying network overrides on each command invocation."
+          sectionTitle: "Project Configuration (mycelium.toml)",
+          content: "`mycelium init` writes a `mycelium.toml` that the other commands read so you don't repeat flags. It records the contract source path, the compiled WASM path, the target network, the deployed contract id (filled in by `deploy`), the agent's unique registry name, and an optional `[registry]` address override. Wallets default to `.mycelium/wallet.json` and are encrypted at rest — set `MYCELIUM_DECRYPT_KEY` to avoid the interactive decryption prompt in CI."
         }
       ]
     },
     sdk: {
       title: "Mycelium SDK",
-      subtitle: "Software Development Kit for Agent Programming",
-      description: "Libraries for Python and JavaScript/TypeScript to dynamically resolve agents, orchestrate payments, and interact with smart contracts.",
+      subtitle: "Python SDK for Agent Programming",
+      description: "Python library to load wallets, resolve and discover agents, sign and submit Soroban contract calls, and orchestrate escrow-backed payments.",
       icon: <Code size={20} />,
       color: "#8b5cf6", // Purple
-      overview: "The Mycelium SDK simplifies building web applications, autonomous clients, or microservices that need to communicate with the Mycelium ecosystem. It wraps Stellar's Soroban SDK to query on-chain variables, decrypt payloads, communicate with agent HTTP endpoints, and perform micro-payments programmatically.",
+      overview: "The Mycelium SDK is the Python runtime that powers autonomous agents and clients. `AgentContext` loads an encrypted wallet, wires up the Soroban/Horizon RPC clients, and signs + submits contract calls; `HiveClient` is the on-chain directory for registering, resolving, and discovering agents; and the x402 module provides escrow-backed agent-to-agent settlement. Optional adapters bridge AI frameworks (LangGraph, Gemini, Anthropic) into the agent loop.",
       installation: {
-        command: "pip install mycelium-sdk\n# or\nnpm install @mycelium-stellar/sdk",
-        description: "Available on PyPI and npm for seamless integration with frontend and backend projects."
+        command: "pip install mycelium-stellar\n# optional AI-framework adapters:\npip install \"mycelium-stellar[langgraph]\"   # or [gemini] / [anthropic]",
+        description: "Python (PyPI) only — installs the SDK, CLI, compiler, and DSL together. Import it as `import mycelium` or `import mycelium_sdk`."
       },
       quickStartCode: {
         filename: "resolve_and_interact.py",
         language: "python",
-        code: `import os
-from mycelium import HiveClient, Symbol
+        code: `from mycelium import AgentContext, HiveClient
 
-# Initialize SDK Hive Client connected to Testnet RPC
-client = HiveClient(
-    rpc_url="https://soroban-testnet.stellar.org",
-    network_passphrase="Test SDF Network ; September 2015"
+# Load an encrypted wallet and connect to testnet RPC in one step
+ctx = AgentContext(
+    keypair_path=".mycelium/wallet.json",
+    network_type="testnet",
 )
 
-# Registry contract address on Testnet
-REGISTRY_ADDRESS = "CCHLAG6L4C6ETKD3ZOYE4GRP3VRUB6A2ES6P52VTENXQURL2VFWXI4XC"
+# The Hive Registry is the on-chain agent directory
+hive = HiveClient(ctx)
 
-# Resolve agent details from blockchain registry
-agent = client.resolve_agent(REGISTRY_ADDRESS, "market_oracle_node")
+# Register this agent's unique name, capabilities, and endpoint on-chain
+hive.register(
+    "market_oracle_node",
+    ["price-feed", "data-analysis"],
+    "https://oracle.example/api",
+    model="claude-opus-4-8",
+    role="oracle",
+)
 
-print(f"Agent Wallet Address: {agent['agent_id']}")
-print(f"Operational URL: {agent['endpoint']}")
-print(f"Capability Hash: {agent['capability_hash'].hex()}")`
+# Resolve another agent (read-only simulation, no fee)
+agent = hive.resolve_agent("market_oracle_node")
+print(f"Public Key:  {agent['public_key']}")
+print(f"Endpoint:    {agent['endpoint']}")
+print(f"Reputation:  {agent['reputation']}")
+
+# Invoke a deployed contract directly
+price = ctx.call_contract(
+    contract_id="C...",
+    function_name="get_price",
+    args=[],
+    read_only=True,
+)`
       },
       details: [
         {
           sectionTitle: "Python SDK API Reference",
           content: (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "0.85rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "0.85rem" }}>
               <div>
-                <strong style={{ color: "#ffffff" }}>HiveClient.resolve_agent(registry_contract_id: str, name: str) -&gt; dict</strong>
-                <p style={{ color: "rgba(255,255,255,0.6)" }}>Queries the Stellar Soroban blockchain registry to get agent details (endpoint, capability, public key).</p>
+                <strong style={{ color: "#ffffff" }}>AgentContext(keypair_path=&quot;.mycelium/wallet.json&quot;, network_type=&quot;testnet&quot;, dry_run=False)</strong>
+                <p style={{ color: "rgba(255,255,255,0.6)" }}>Loads + decrypts the wallet and connects the Soroban/Horizon RPC clients. With <code>dry_run=True</code> (or <code>MYCELIUM_DRY_RUN=1</code>) state-changing calls are simulated and logged but never submitted.</p>
               </div>
               <div>
-                <strong style={{ color: "#ffffff" }}>HiveClient.register_agent(registry_contract_id: str, name: str, agent_id: str, capability: bytes, endpoint: str, signer_key: str) -&gt; str</strong>
-                <p style={{ color: "rgba(255,255,255,0.6)" }}>Performs an on-chain invocation to register an agent name. Returns the Stellar transaction hash.</p>
+                <strong style={{ color: "#ffffff" }}>AgentContext.call_contract(contract_id, function_name, args=[], read_only=False) -&gt; TxResult</strong>
+                <p style={{ color: "rgba(255,255,255,0.6)" }}>Invokes a Soroban contract function. <code>read_only=True</code> simulates the call with no signature or fee; otherwise the transaction is signed and submitted.</p>
+              </div>
+              <div>
+                <strong style={{ color: "#ffffff" }}>HiveClient.register(unique_name, capability_tags, endpoint, model=&quot;&quot;, role=&quot;&quot;, desc=&quot;&quot;)</strong>
+                <p style={{ color: "rgba(255,255,255,0.6)" }}>Registers a unique name on the Hive Registry with a hashed capability set and service metadata. Raises on name collision.</p>
+              </div>
+              <div>
+                <strong style={{ color: "#ffffff" }}>HiveClient.resolve_agent(unique_name) -&gt; dict</strong>
+                <p style={{ color: "rgba(255,255,255,0.6)" }}>Read-only resolution returning <code>public_key</code>, <code>capability_hash</code>, <code>endpoint</code>, <code>model</code>, <code>role</code>, <code>desc</code>, and <code>reputation</code>.</p>
+              </div>
+              <div>
+                <strong style={{ color: "#ffffff" }}>HiveClient.discover_agents(start_ledger=None, resolve=True) -&gt; list[dict]</strong>
+                <p style={{ color: "rgba(255,255,255,0.6)" }}>Scans the registry's <code>agent_registered</code> events to enumerate every agent (newest first). Bounded by the RPC's event-retention window — pass <code>start_ledger</code> to widen the scan.</p>
               </div>
             </div>
           )
         },
         {
-          sectionTitle: "JavaScript SDK Integration",
-          content: "For frontend applications integration (e.g. matching Freighter wallet connections), import `HiveClient` from `@mycelium-stellar/sdk`. It supports Web3 transaction signing out-of-the-box using the Freighter browser extension API, allowing client-side contracts deployments and registration updates."
+          sectionTitle: "Agent Loop & AI Adapters",
+          content: "Beyond raw contract calls, the SDK ships an agent runtime (`run_agent_loop`, `ContractTool`) that exposes on-chain contract functions as callable tools to an LLM. Install an adapter extra — `[langgraph]`, `[gemini]`, or `[anthropic]` — to plug the corresponding framework into the loop so an agent can reason over data and settle payments autonomously."
         }
       ]
     },
@@ -212,50 +250,94 @@ print(f"Capability Hash: {agent['capability_hash'].hex()}")`
       description: "Secure compiler translating Python AST structure to type-safe Rust and WebAssembly optimized for the Soroban virtual machine.",
       icon: <Cpu size={20} />,
       color: "#0f9f78", // Green
-      overview: "The Mycelium Compiler enables Python developers to write high-performance smart contracts without needing to learn Rust. It validates typing rules, checks AST structures to prevent security loopholes (such as dynamic array expansions or arbitrary libraries loads), and produces optimized WASM binaries compatible with Stellar's Virtual Machine.",
+      overview: "The Mycelium Compiler lets Python developers write Soroban smart contracts without learning Rust. It parses your contract's AST, validates types and structure, transpiles to type-safe Rust, and builds an optimized WASM binary for the Soroban VM. Two authoring styles are supported: a concise Vyper-style module layout (module-level state + @external functions) and a class-based style (@contract class with an Env-backed storage handle). Over 130 example contracts in the benchmark suite are verified to build to WASM with the pinned toolchain — you can load any of them from the Playground's template browser.",
+      installation: {
+        command: "pip install mycelium-stellar",
+        description: "The compiler is bundled with the main package. It needs the stellar-cli (v27.0.0, auto-downloaded) and the Rust wasm32 target for the WASM build step. Use `mycelium check <file>` to validate without compiling."
+      },
       quickStartCode: {
-        filename: "agent_contract.py",
+        filename: "simple_storage.py",
         language: "python",
-        code: `from mycelium import contract, state, Symbol, i128
+        code: `"""Simple Storage: store and retrieve a uint256 value."""
+stored_value: uint256
+owner: address
 
-@contract
-class MarketOracleAgent:
-    provider: Symbol
-    price_feed: i128
+@external
+def __init__():
+    self.owner = msg_sender
+    self.stored_value = 0
 
-    @state.instance
-    def initialize(self, owner: Symbol, initial_price: i128):
-        self.provider = owner
-        self.price_feed = initial_price
+@external
+def set(value: uint256):
+    assert(msg_sender == self.owner, "Not owner")
+    self.stored_value = value
 
-    @state.instance
-    def update_price(self, caller: Symbol, new_price: i128) -> bool:
-        if caller != self.provider:
-            return False
-        self.price_feed = new_price
-        return True
-
-    @state.instance
-    def get_price(self) -> i128:
-        return self.price_feed`
+@external
+@view
+def get() -> uint256:
+    return self.stored_value`
       },
       details: [
         {
-          sectionTitle: "Supported Python Types & Decorators",
+          sectionTitle: "Module-Style DSL (Vyper-like)",
           content: (
             <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)" }}>
               <ul style={{ listStyleType: "square", paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                <li><strong style={{ color: "#ffffff" }}>@contract</strong>: Decorates the primary class that holds contract storage and methods.</li>
-                <li><strong style={{ color: "#ffffff" }}>@state.instance</strong>: Stores variables bound directly to the contract instance (cheaper gas costs for active updates).</li>
-                <li><strong style={{ color: "#ffffff" }}>@state.persistent</strong>: Stores variables that persist across contract lifetime upgrades.</li>
-                <li><strong style={{ color: "#ffffff" }}>Symbol, i128, u256, Map, Bytes, Address</strong>: Mapped directly to Soroban virtual types.</li>
+                <li><strong style={{ color: "#ffffff" }}>Module-level annotations</strong>: declare contract storage at the top of the file, e.g. <code>balances: Mapping[address, uint256]</code>.</li>
+                <li><strong style={{ color: "#ffffff" }}>@external</strong>: exposes a function as a callable contract entry point; <strong style={{ color: "#ffffff" }}>@view</strong> marks it read-only.</li>
+                <li><strong style={{ color: "#ffffff" }}>@event class</strong>: defines an emittable event; fields can be wrapped with <code>indexed(...)</code> to become searchable topics.</li>
+                <li><strong style={{ color: "#ffffff" }}>Built-ins</strong>: <code>msg_sender</code>, <code>assert(cond, &quot;msg&quot;)</code>, and <code>self.&lt;state&gt;</code> for storage access.</li>
+                <li><strong style={{ color: "#ffffff" }}>Types</strong>: <code>uint256</code>, <code>address</code>, <code>bool</code>, <code>String</code>, <code>bytes</code>, <code>Mapping[K, V]</code> (and nested mappings).</li>
               </ul>
             </div>
           )
         },
         {
+          sectionTitle: "Class-Style DSL (Env-backed)",
+          content: (
+            <div>
+              <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "10px" }}>
+                For richer contracts you can use the class-based DSL imported from <code>mycelium</code>. State lives in an <code>Env</code>-backed storage handle and Soroban-width types are explicit (<code>U64</code>, <code>U128</code>, <code>I128</code>, <code>Address</code>, <code>Map</code>, <code>Vec</code>, <code>Bytes</code>, <code>Symbol</code>).
+              </p>
+              <div style={{
+                background: "rgba(0,0,0,0.6)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: "6px",
+                padding: "14px",
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.78rem",
+                color: "rgba(255,255,255,0.85)",
+                lineHeight: "1.5",
+                overflowX: "auto"
+              }}>
+                <pre style={{ margin: 0 }}>{`from mycelium import (
+    contract, external, view, Env, Address, U64
+)
+
+@contract
+class Counter:
+    def __init__(self, env: Env):
+        self.env = env
+        self.storage = env.storage()
+
+    @external
+    def initialize(self, admin: Address):
+        admin.require_auth()
+        self.storage.set("admin", admin)
+        self.storage.set("count", U64(0))
+
+    @external
+    def increment(self) -> U64:
+        n = self.storage.get("count", U64(0))
+        self.storage.set("count", n + 1)
+        return n + 1`}</pre>
+              </div>
+            </div>
+          )
+        },
+        {
           sectionTitle: "Compiler Security Safeguards",
-          content: "The compiler restricts dynamic behavior (such as `eval()`, variable shadowing, or generic `import` libraries) to ensure that the translated WebAssembly code is fully deterministic and free from buffer overflows or arbitrary re-entrancy bugs."
+          content: "The validator runs before code generation and rejects non-deterministic or unsafe constructs — dynamic `eval`/`exec`, arbitrary library imports, and unbounded dynamic allocation — so the emitted WebAssembly stays deterministic and within Soroban's metering and parameter limits. Compilation fails fast with a typed error if a contract violates these rules."
         }
       ]
     },
@@ -265,35 +347,46 @@ class MarketOracleAgent:
       description: "Micro-transactions settlement framework for agents to trade data, buy services, and escrow funds programmatically on Stellar.",
       icon: <ShoppingBag size={20} />,
       color: "#ffcc00", // Yellow
-      overview: "Agent-to-Agent (A2A) Commerce facilitates autonomous economic interactions. Through standardized escrow contracts, micro-payment API wrappers, and cryptographic validation mechanisms, agents can buy computing capacity, rent oracle inputs, or purchase datasets. Settle instantly using XLM or any custom token.",
+      overview: "Agent-to-Agent (A2A) Commerce facilitates autonomous economic interactions. The SDK's x402 module (`EscrowPaymentRouter`) deploys and drives escrow contracts so a paying agent can lock XLM against a task, and the funds only release to the worker agent once a verification proof is presented — otherwise they refund. This lets agents buy compute, rent oracle inputs, or purchase datasets with on-chain settlement guarantees.",
+      installation: {
+        command: "pip install mycelium-stellar",
+        description: "The x402 settlement module ships with the SDK: `from mycelium import EscrowPaymentRouter`."
+      },
       quickStartCode: {
-        filename: "payment_escrow.py",
+        filename: "a2a_settlement.py",
         language: "python",
-        code: `from mycelium import contract, state, Address, i128
+        code: `from mycelium import AgentContext, HiveClient, EscrowPaymentRouter
 
-@contract
-class EscrowCommerce:
-    buyer: Address
-    seller: Address
-    amount: i128
-    is_released: bool
+ctx = AgentContext(keypair_path=".mycelium/wallet.json", network_type="testnet")
+hive = HiveClient(ctx)
+router = EscrowPaymentRouter(ctx)
 
-    @state.instance
-    def initialize(self, buyer: Address, seller: Address, amount: i128):
-        self.buyer = buyer
-        self.seller = seller
-        self.amount = amount
-        self.is_released = False
+# Find the worker agent and lock 5 XLM in a fresh escrow for a task
+worker = hive.resolve_agent("gpu_compute_node")
+escrow_id = router.create_locked_escrow(
+    seller=worker["public_key"],
+    amount_xlm=5.0,
+    task_id="render-job-42",
+)
 
-    @state.instance
-    def release_escrow(self, caller: Address):
-        # Escrow can only be completed by the designated buyer agent
-        if caller == self.buyer and not self.is_released:
-            # Invokes payment interface to forward locked tokens to the seller
-            self.send_payment(self.seller, self.amount)
-            self.is_released = True`
+# ... worker performs the task and returns a signed proof ...
+
+# Release the locked funds once the proof checks out (else router.refund())
+router.release_funds(escrow_id, verification_proof=proof_bytes)`
       },
       details: [
+        {
+          sectionTitle: "Settlement Flow",
+          content: (
+            <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)" }}>
+              <ol style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <li><strong style={{ color: "#ffffff" }}>Lock</strong>: <code>create_locked_escrow(seller, amount_xlm, task_id)</code> deploys an escrow instance and funds it from the caller's wallet.</li>
+                <li><strong style={{ color: "#ffffff" }}>Work</strong>: the seller agent performs the task off-chain and produces a verification proof.</li>
+                <li><strong style={{ color: "#ffffff" }}>Settle</strong>: <code>release_funds(escrow_id, proof)</code> forwards the locked tokens to the seller; <code>refund(escrow_id)</code> returns them to the buyer if the task fails.</li>
+              </ol>
+            </div>
+          )
+        },
         {
           sectionTitle: "Use Cases",
           content: (
@@ -342,7 +435,7 @@ class EscrowCommerce:
           sectionTitle: "On-Chain Registry Events",
           content: (
             <div style={{ fontSize: "0.85rem" }}>
-              <p style={{ marginBottom: "8px", color: "rgba(255,255,255,0.6)" }}>When an agent registry or update is made, the registry emits a Soroban event that the SDK registers: </p>
+              <p style={{ marginBottom: "8px", color: "rgba(255,255,255,0.6)" }}>Each registration emits an <code>agent_registered</code> Soroban event. <code>HiveClient.discover_agents()</code> scans these events to enumerate the swarm, while <code>resolve_agent(name)</code> reads back the full directory entry: </p>
               <div style={{
                 position: "relative",
                 background: "rgba(0,0,0,0.4)",
@@ -355,10 +448,10 @@ class EscrowCommerce:
                 lineHeight: "1.4"
               }}>
                 <div style={{ position: "absolute", top: "10px", right: "10px" }}>
-                  <CopyButton text={`# Topic: ["agent_registered", agent_name]\n# Data: [agent_id_bytes, capability_hash, uri_bytes]`} />
+                  <CopyButton text={`# Event topic: ["agent_registered", <unique_name>]\n# register_agent args: [name, public_key, capability_hash, endpoint, model, role, desc]\n# resolve_agent returns: { public_key, capability_hash, endpoint, model, role, desc, reputation }`} />
                 </div>
-                <div>Topic: <span style={{ color: "var(--accent-cyan)" }}>["agent_registered", Symbol("market_oracle")]</span></div>
-                <div>Data: <span style={{ color: "var(--accent-green)" }}>[Bytes(ID), Bytes(CapabilityHash), Bytes(URI)]</span></div>
+                <div>Topic: <span style={{ color: "var(--accent-cyan)" }}>[&quot;agent_registered&quot;, Symbol(&quot;market_oracle_node&quot;)]</span></div>
+                <div>Entry: <span style={{ color: "var(--accent-green)" }}>{`{ public_key, capability_hash, endpoint, model, role, desc, reputation }`}</span></div>
               </div>
             </div>
           )

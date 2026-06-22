@@ -20,11 +20,11 @@ export default function InteractiveTerminal() {
 
   const commands = [
     {
-      cmd: "pip install mycelium",
+      cmd: "pip install mycelium-stellar",
       outputs: [
-        "Downloading mycelium-0.1.0-py3-none-any.whl (42 kB)",
-        "Installing collected packages: mycelium",
-        "Successfully installed mycelium-0.1.0"
+        "Downloading mycelium_stellar-0.1.0-py3-none-any.whl (64 kB)",
+        "Installing collected packages: mycelium-stellar",
+        "Successfully installed mycelium-stellar-0.1.0"
       ]
     },
     {
@@ -111,7 +111,7 @@ export default function InteractiveTerminal() {
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText("pip install mycelium");
+    navigator.clipboard.writeText("pip install mycelium-stellar");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -198,7 +198,7 @@ export default function InteractiveTerminal() {
             ) : (
               <>
                 <Copy size={12} />
-                <span>pip install mycelium</span>
+                <span>pip install mycelium-stellar</span>
               </>
             )}
           </button>

@@ -9,6 +9,7 @@ import {
   Copy, Download, Cpu as CpuIcon, Database, Activity, Wifi, TerminalSquare, Zap
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+import { CONTRACT_TEMPLATES, TEMPLATE_CATEGORIES } from "../../data/contractTemplates";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -31,6 +32,10 @@ export default function Playground() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [githubTokenBypass, setGithubTokenBypass] = useState("");
   const [showTokenInput, setShowTokenInput] = useState(false);
+
+  // Terminal prompt identity: "mycelium@<github-username>" once authenticated, else guest.
+  const promptUser = (isAuthenticated && username ? username : "guest");
+  const shellPrompt = `mycelium@${promptUser}:~$`;
 
   // Workspaces (GitHub Repos) & Files State
   const [workspaces, setWorkspaces] = useState<RepoItem[]>([]);
@@ -92,6 +97,11 @@ export default function Playground() {
   const [showNewWorkspaceModal, setShowNewWorkspaceModal] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+
+  // Contract Template Browser (benchmark contracts verified to compile to WASM)
+  const [showTemplateBrowser, setShowTemplateBrowser] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState<string>("All");
   const [newFileName, setNewFileName] = useState("");
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -812,12 +822,19 @@ export default function Playground() {
     const cmd = cliInput.trim();
     if (!cmd) return;
     
-    addTerminalLog("stdout", `mycelium@soroban:~$ ${cmd}`);
+    addTerminalLog("stdout", `${shellPrompt} ${cmd}`);
     setCliHistory(prev => [cmd, ...prev]);
     setHistoryIndex(-1);
     setCliInput("");
     
     executeCliCommand(cmd);
+  };
+
+  const injectTemplate = (tpl: { label: string; source: string }) => {
+    setEditorContent(tpl.source);
+    setShowTemplateBrowser(false);
+    addTerminalLog("success", `Loaded "${tpl.label}" template into the editor.`);
+    addTerminalLog("info", "This contract is verified to compile to Soroban WASM. Hit Compile to build it.");
   };
 
   const handleCompile = async () => {
@@ -2034,66 +2051,31 @@ export default function Playground() {
                     fontSize: "0.8rem",
                     color: "var(--text-muted)",
                     marginBottom: "8px",
-                    textTransform: "uppercase"
+                    textTransform: "uppercase",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
                   }}>
-                    Code Templates
+                    <span>Contract Templates</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--accent-green)" }}>
+                      {CONTRACT_TEMPLATES.length}
+                    </span>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <button 
+                    <button
                       onClick={() => {
-                        setEditorContent(`from mycelium import contract, state, Symbol, i128
-
-@contract
-class MarketOracleAgent:
-    provider: Symbol
-    price_feed: i128
-
-    @state.instance
-    def initialize(self, owner: Symbol, initial_price: i128):
-        self.provider = owner
-        self.price_feed = initial_price
-
-    @state.instance
-    def update_price(self, caller: Symbol, new_price: i128) -> bool:
-        if caller != self.provider:
-            return False
-        self.price_feed = new_price
-        return True
-
-    @state.instance
-    def get_price(self) -> i128:
-        return self.price_feed
-`);
-                        addTerminalLog("info", "Injected MarketOracleAgent template.");
+                        setTemplateSearch("");
+                        setTemplateCategory("All");
+                        setShowTemplateBrowser(true);
                       }}
-                      className="btn-retro"
-                      style={{ fontSize: "0.75rem", padding: "4px" }}
+                      className="btn-retro btn-retro-accent"
+                      style={{ fontSize: "0.78rem", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                     >
-                      Oracle Agent
+                      <FileCode size={13} /> Browse Templates
                     </button>
-                    <button 
-                      onClick={() => {
-                        setEditorContent(`from mycelium import contract, state, Symbol, Map, Bytes
-
-@contract
-class MyceliumHiveRegistry:
-    # Storage maps agent public key to operational endpoint data
-    registry: Map[Bytes, Map[Symbol, Bytes]]
-
-    @state.persistent
-    def register_agent(self, agent_id: Bytes, capability_hash: Bytes, operational_uri: Bytes):
-        manifest = Map()
-        manifest[Symbol("capability")] = capability_hash
-        manifest[Symbol("endpoint")] = operational_uri
-        self.registry[agent_id] = manifest
-`);
-                        addTerminalLog("info", "Injected HiveRegistry template.");
-                      }}
-                      className="btn-retro"
-                      style={{ fontSize: "0.75rem", padding: "4px" }}
-                    >
-                      Hive Registry
-                    </button>
+                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                      {CONTRACT_TEMPLATES.length} example contracts verified to compile to Soroban WASM.
+                    </div>
                   </div>
                 </div>
               )}
@@ -2563,7 +2545,7 @@ class MyceliumHiveRegistry:
                       
                       {/* Interactive prompt form */}
                       <form onSubmit={handleCliSubmit} style={{ display: "flex", alignItems: "center", marginTop: "10px", width: "100%" }}>
-                        <span style={{ color: theme.accent, marginRight: "8px", userSelect: "none" }}>mycelium@soroban:~$</span>
+                        <span style={{ color: theme.accent, marginRight: "8px", userSelect: "none" }}>{shellPrompt}</span>
                         <input
                           type="text"
                           value={cliInput}
@@ -2997,6 +2979,171 @@ class MyceliumHiveRegistry:
             </main>
           </div>
         </>
+      )}
+
+      {/* CONTRACT TEMPLATE BROWSER */}
+      {showTemplateBrowser && (
+        <div
+          onClick={() => setShowTemplateBrowser(false)}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 110,
+            padding: "30px"
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="panel-retro"
+            style={{
+              width: "100%",
+              maxWidth: "920px",
+              height: "min(80vh, 720px)",
+              display: "flex",
+              flexDirection: "column",
+              padding: "0",
+              overflow: "hidden"
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              padding: "18px 22px",
+              borderBottom: "1px solid var(--border-color)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <h3 style={{ fontSize: "1.4rem", color: "var(--accent-cyan)", letterSpacing: "1px", margin: 0 }}>
+                  CONTRACT TEMPLATES
+                </h3>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "4px", fontFamily: "var(--font-mono)" }}>
+                  {CONTRACT_TEMPLATES.length} contracts verified to compile to Soroban WASM
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTemplateBrowser(false)}
+                className="btn-retro"
+                style={{ fontSize: "0.85rem", padding: "4px 12px" }}
+              >
+                CLOSE
+              </button>
+            </div>
+
+            {/* Controls */}
+            <div style={{ padding: "14px 22px", borderBottom: "1px solid var(--border-color)", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <input
+                type="text"
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                placeholder="Search contracts (e.g. escrow, staking, oracle, nft)..."
+                autoFocus
+                style={{
+                  width: "100%",
+                  background: "#000",
+                  border: "1px solid var(--border-color)",
+                  color: "var(--accent-green)",
+                  padding: "9px 12px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.9rem",
+                  outline: "none"
+                }}
+              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {["All", ...TEMPLATE_CATEGORIES].map((cat) => {
+                  const isActive = templateCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setTemplateCategory(cat)}
+                      className={`btn-retro ${isActive ? "btn-retro-accent" : ""}`}
+                      style={{ fontSize: "0.7rem", padding: "3px 9px" }}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Grid */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 22px" }}>
+              {(() => {
+                const q = templateSearch.trim().toLowerCase();
+                const filtered = CONTRACT_TEMPLATES.filter((t) => {
+                  const matchesCat = templateCategory === "All" || t.category === templateCategory;
+                  const matchesSearch =
+                    !q ||
+                    t.label.toLowerCase().includes(q) ||
+                    t.description.toLowerCase().includes(q) ||
+                    t.id.toLowerCase().includes(q);
+                  return matchesCat && matchesSearch;
+                });
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
+                      No contracts match &quot;{templateSearch}&quot;.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                    gap: "12px"
+                  }}>
+                    {filtered.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => injectTemplate(t)}
+                        style={{
+                          textAlign: "left",
+                          background: "rgba(255,255,255,0.02)",
+                          border: "1px solid var(--border-color)",
+                          borderRadius: "6px",
+                          padding: "12px 14px",
+                          cursor: "pointer",
+                          color: "var(--foreground)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px",
+                          transition: "all 0.15s"
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent-cyan)"; e.currentTarget.style.background = "rgba(0,242,254,0.05)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-color)"; e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "0.92rem", fontWeight: 600, color: "#fff" }}>{t.label}</span>
+                          <span style={{
+                            fontSize: "0.6rem",
+                            fontFamily: "var(--font-mono)",
+                            color: "var(--accent-purple)",
+                            border: "1px solid var(--border-color)",
+                            borderRadius: "10px",
+                            padding: "1px 7px",
+                            whiteSpace: "nowrap"
+                          }}>
+                            {t.category}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                          {t.description || "Mycelium smart contract."}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* NEW WORKSPACE MODAL */}

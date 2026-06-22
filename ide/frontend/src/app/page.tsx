@@ -233,9 +233,9 @@ export default function Home() {
               Launch Playground
               <ChevronRight size={15} />
             </Link>
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="premium-button-secondary">
-              Read SDK Docs
-            </a>
+            <Link href="/docs" className="premium-button-secondary">
+              Read Docs
+            </Link>
           </motion.div>
         </div>
 
@@ -711,9 +711,9 @@ export default function Home() {
               Launch Playground
               <ChevronRight size={15} />
             </Link>
-            <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="premium-button-secondary">
-              Read SDK Docs
-            </a>
+            <Link href="/docs" className="premium-button-secondary">
+              Read Docs
+            </Link>
           </motion.div>
         </div>
       </section>
