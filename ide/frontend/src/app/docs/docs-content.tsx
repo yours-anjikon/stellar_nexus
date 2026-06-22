@@ -44,6 +44,13 @@ function CodeBlock({
     bash: "var(--accent-green)", python: "var(--accent-cyan)",
     toml: "var(--accent-yellow)", typescript: "#3178c6",
   };
+
+  // Extract executable commands only for copy action on shell blocks (omit comments)
+  const isShell = language === "bash" || language === "sh" || filename === "terminal";
+  const copyText = isShell
+    ? code.split("\n").filter(line => !line.trim().startsWith("#")).join("\n").trim()
+    : code;
+
   return (
     <div style={{
       borderRadius: 8, overflow: "hidden",
@@ -74,7 +81,7 @@ function CodeBlock({
             letterSpacing: "0.5px",
           }}>{language}</span>
         </div>
-        <CopyButton text={code} />
+        <CopyButton text={copyText} />
       </div>
       {/* code body */}
       <pre style={{
@@ -369,69 +376,101 @@ export default function DocsContent({ slug: rawSlug }: { slug: string }) {
 
             <SectionH2 id="step-1">1 — Install the Toolchain</SectionH2>
             <P>
-              Install the core package using `pip`. This installs the CLI, SDK components, the Python-to-WASM transpiler, and local simulator modules.
+              Install the core package using `pip`. This installs the CLI, SDK components, the Python-to-WASM transpiler, and local simulator modules:
             </P>
             <CodeBlock
               language="bash"
-              code={`# Install the Mycelium toolchain
-pip install mycelium-stellar
-
-# Validate that the binaries are accessible
-mycelium --version
-
-# Perform system check for dependencies (stellar-cli, Rust target)
-mycelium doctor`}
+              code="pip install mycelium-stellar"
+            />
+            <P>
+              Validate that the binaries are accessible:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium --version"
+            />
+            <P>
+              Perform a system environment verification to check local toolchain requirements:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium doctor"
             />
 
             <SectionH2 id="step-2">2 — Scaffold your workspace</SectionH2>
             <P>
-              Initialize a template agent project directory, set up your encrypted local wallet keypair, and request test assets from the Stellar Testnet Friendbot.
+              Initialize a template agent project directory:
             </P>
             <CodeBlock
               language="bash"
               filename="terminal"
-              code={`# Scaffold a workspace template
-mycelium init my_agent
-cd my_agent
-
-# Generate an encrypted Ed25519 wallet keypair
-mycelium newwallet --passphrase "my-secure-password"
-
-# Fund your wallet from the Stellar Testnet Friendbot faucet
-mycelium fund`}
+              code={`mycelium init my_agent\ncd my_agent`}
+            />
+            <P>
+              Generate an encrypted Ed25519 wallet keypair to sign transaction requests:
+            </P>
+            <CodeBlock
+              language="bash"
+              filename="terminal"
+              code="mycelium newwallet --passphrase &quot;my-secure-password&quot;"
+            />
+            <P>
+              Request testnet assets from the Stellar Friendbot faucet to fund your account:
+            </P>
+            <CodeBlock
+              language="bash"
+              filename="terminal"
+              code="mycelium fund"
             />
 
             <SectionH2 id="step-3">3 — Compile and Deploy</SectionH2>
             <P>
-              Validate your contract definitions, transpile the Python syntax into a compiled WASM file, and deploy it onto the Stellar blockchain.
+              Validate type annotations and check contract AST for compatibility:
             </P>
             <CodeBlock
               language="bash"
               filename="terminal"
-              code={`# Validate types and check AST for compatibility
-mycelium check contract.py
-
-# Transpile and compile Python code to Soroban WASM
-mycelium compile --optimize
-
-# Deploy compiled binary to Stellar Testnet
-mycelium deploy --network testnet
-
-# Register your agent profile on the Hive Registry
-mycelium register`}
+              code="mycelium check contract.py"
+            />
+            <P>
+              Transpile and compile Python code to optimized Soroban WebAssembly:
+            </P>
+            <CodeBlock
+              language="bash"
+              filename="terminal"
+              code="mycelium compile --optimize"
+            />
+            <P>
+              Deploy the compiled WASM binary to Stellar Testnet:
+            </P>
+            <CodeBlock
+              language="bash"
+              filename="terminal"
+              code="mycelium deploy --network testnet"
+            />
+            <P>
+              Register your agent profile and endpoint parameters on the Hive Registry:
+            </P>
+            <CodeBlock
+              language="bash"
+              filename="terminal"
+              code="mycelium register"
             />
 
             <SectionH2 id="step-4">4 — Run the Agent Loop</SectionH2>
             <P>
-              Test the agent loop in simulation dry-run mode (which simulates state changes locally without committing network fees), then run it live.
+              Test the agent loop in simulation dry-run mode (which simulates state changes locally without committing network fees):
             </P>
             <CodeBlock
               language="bash"
-              code={`# Dry-run: simulate the LLM tool-calling loop locally
-mycelium test
-
-# Run the live agent runtime listener
-mycelium run`}
+              code="mycelium test"
+            />
+            <P>
+              Start the live agent execution listener:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium run"
             />
 
             <Callout type="tip">
@@ -509,19 +548,25 @@ mycelium run`}
 
             <SectionH2 id="build-setup">Project Setup</SectionH2>
             <P>
-              Create a workspace directory, establish your encrypted wallet, and fund it using Friendbot:
+              Initialize your project workspace directory using templates:
             </P>
             <CodeBlock
               language="bash"
-              code={`# Initialize workspace with templates
-mycelium init counter_agent --yes
-cd counter_agent
-
-# Setup local wallet keypair
-mycelium newwallet --passphrase "securepass"
-
-# Obtain testnet XLM
-mycelium fund`}
+              code={`mycelium init counter_agent --yes\ncd counter_agent`}
+            />
+            <P>
+              Set up your local wallet credentials and keypair:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium newwallet --passphrase &quot;securepass&quot;"
+            />
+            <P>
+              Fund your wallet using Friendbot to request test XLM:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium fund"
             />
 
             <SectionH2 id="build-contract">Write the Smart Contract</SectionH2>
@@ -591,18 +636,25 @@ print(f"Increment transaction successful! Hash: {tx.hash}")`}
 
             <SectionH2 id="build-run">Run Locally</SectionH2>
             <P>
-              You can test the contract locally in simulation mode, compile it, and run the agent:
+              Check the contract type signatures and syntax structures:
             </P>
             <CodeBlock
               language="bash"
-              code={`# Check type signatures and syntax structure
-mycelium check contract.py
-
-# Run contract calls in local simulation
-mycelium test
-
-# Run the live agent
-mycelium run`}
+              code="mycelium check contract.py"
+            />
+            <P>
+              Run contract calls in local simulation mode to test your logic:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium test"
+            />
+            <P>
+              Execute the live agent loop:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium run"
             />
           </>
         );
@@ -647,21 +699,32 @@ capabilities          = ["counter", "demo"]`}
 
             <SectionH2 id="deploy-testnet">Deploy &amp; Register Flow</SectionH2>
             <P>
-              Follow these commands to deploy your compiled contract onto the Testnet and register the agent service endpoints:
+              First, compile your Python contract source with optimization enabled:
             </P>
             <CodeBlock
               language="bash"
-              code={`# 1. Compile contract with optimization enabled
-mycelium compile --optimize
-
-# 2. Deploy binary code onto Stellar network
-mycelium deploy --network testnet
-
-# 3. Write metadata parameters to Hive Registry
-mycelium register
-
-# 4. View active on-chain status
-mycelium status`}
+              code="mycelium compile --optimize"
+            />
+            <P>
+              Next, deploy the compiled WASM binary onto the Stellar Testnet network:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium deploy --network testnet"
+            />
+            <P>
+              Register your agent profile capabilities and host endpoint to the Hive Registry:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium register"
+            />
+            <P>
+              Verify active deployment details and reputation status:
+            </P>
+            <CodeBlock
+              language="bash"
+              code="mycelium status"
             />
 
             <SectionH2 id="deploy-considerations">Mainnet Considerations</SectionH2>
