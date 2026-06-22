@@ -212,6 +212,70 @@ export default function Home() {
               Read Docs
             </Link>
           </motion.div>
+
+          {/* Package installation bar */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.54, ease }}
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "16px",
+              marginBottom: "60px",
+              maxWidth: "960px",
+              width: "100%",
+              padding: "0 20px",
+              zIndex: 20
+            }}
+          >
+            {[
+              { name: "mycelium-stellar", cmd: "pip install mycelium-stellar", url: "https://pypi.org/project/mycelium-stellar/" },
+              { name: "mycelium-sdk", cmd: "pip install mycelium-sdk", url: "https://pypi.org/project/mycelium-sdk/" },
+              { name: "mycelium-cli", cmd: "pip install mycelium-cli", url: "https://pypi.org/project/mycelium-cli/" },
+              { name: "mycelium-compiler", cmd: "pip install mycelium-compiler", url: "https://pypi.org/project/mycelium-compiler/" }
+            ].map((pkg, idx) => (
+              <a
+                key={idx}
+                href={pkg.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.02)",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  textDecoration: "none",
+                  transition: "all 0.25s ease",
+                  minWidth: "210px",
+                  cursor: "pointer"
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+                  e.currentTarget.style.borderColor = "var(--accent-cyan)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.02)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)";
+                  e.currentTarget.style.transform = "none";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#ffffff" }}>{pkg.name}</span>
+                  <ExternalLink size={12} style={{ color: "rgba(255, 255, 255, 0.4)" }} />
+                </div>
+                <code style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)" }}>
+                  {pkg.cmd}
+                </code>
+              </a>
+            ))}
+          </motion.div>
         </div>
 
         {/* Terminal — rises up after CTAs */}

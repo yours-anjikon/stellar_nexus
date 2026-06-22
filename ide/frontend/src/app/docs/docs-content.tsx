@@ -402,6 +402,35 @@ export default function DocsContent({ slug: rawSlug }: { slug: string }) {
               code="pip install mycelium-stellar"
             />
             <P>
+              Mycelium is split into individual packages on PyPI to allow modular installation if you only require specific parts of the framework. You can install the complete stack or target specific layers directly:
+            </P>
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 12, marginTop: 16, marginBottom: 24
+            }}>
+              {[
+                { name: "mycelium-stellar", cmd: "pip install mycelium-stellar", desc: "The parent wrapper package bundling the full toolchain (DSL, SDK, CLI, compiler).", url: "https://pypi.org/project/mycelium-stellar/" },
+                { name: "mycelium-sdk", cmd: "pip install mycelium-sdk", desc: "The autonomous agent runtime core, providing wallet encryption, RPC integration, and AI adapters.", url: "https://pypi.org/project/mycelium-sdk/" },
+                { name: "mycelium-cli", cmd: "pip install mycelium-cli", desc: "The Typer CLI scaffolding and transaction management utility.", url: "https://pypi.org/project/mycelium-cli/" },
+                { name: "mycelium-compiler", cmd: "pip install mycelium-compiler", desc: "The Python DSL to Soroban-compatible WASM bytecode compiler.", url: "https://pypi.org/project/mycelium-compiler/" }
+              ].map(pkg => (
+                <div key={pkg.name} style={{
+                  padding: "16px", borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  background: "rgba(255,255,255,0.015)",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 600, color: "#fff" }}>{pkg.name}</span>
+                    <a href={pkg.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", color: "var(--accent-cyan)", fontSize: "0.72rem", textDecoration: "none", gap: 3 }}>
+                      PyPI <ExternalLink size={10} />
+                    </a>
+                  </div>
+                  <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.45)", lineHeight: 1.5, margin: "0 0 10px 0" }}>{pkg.desc}</p>
+                  <code style={{ fontSize: "0.72rem", fontFamily: "var(--font-mono)", color: "var(--accent-cyan)", background: "rgba(255,255,255,0.04)", padding: "4px 8px", borderRadius: 4, display: "block" }}>{pkg.cmd}</code>
+                </div>
+              ))}
+            </div>
+            <P>
               Validate that the binaries are accessible:
             </P>
             <CodeBlock
