@@ -25,9 +25,14 @@ import datetime
 app = FastAPI(title="Mycelium Web IDE API Gateway")
 
 # Enable CORS for Next.js frontend
+origins = ["http://localhost:3000", "https://mycelium.isriz.xyz"]
+if FRONTEND_URL:
+    origins.append(FRONTEND_URL.rstrip("/"))
+origins = list(set(origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
