@@ -1,4 +1,4 @@
-import { Keypair } from "@stellar/stellar-sdk";
+import { Keypair, rpc } from "@stellar/stellar-sdk";
 import { TariffShieldClient } from "@tariffshield/sdk";
 import { env } from "./env.js";
 
@@ -13,3 +13,11 @@ export const contractClient = new TariffShieldClient({
 
 export const explorerTx = (hash: string): string =>
   `https://stellar.expert/explorer/${env.STELLAR_NETWORK}/tx/${hash}`;
+
+export async function getCurrentLedgerSequence(): Promise<number> {
+  const server = new rpc.Server(env.STELLAR_RPC_URL, {
+    allowHttp: env.STELLAR_RPC_URL.startsWith("http://"),
+  });
+  const latest = await server.getLatestLedger();
+  return latest.sequence;
+}
