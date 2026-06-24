@@ -77,6 +77,9 @@
                 },
                 {
                   "bool": false
+                },
+                {
+                  "bool": false
                 }
               ]
             }
@@ -414,6 +417,14 @@
                   {
                     "key": {
                       "symbol": "is_open_bounty"
+                    },
+                    "val": {
+                      "bool": false
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "is_public_good"
                     },
                     "val": {
                       "bool": false
