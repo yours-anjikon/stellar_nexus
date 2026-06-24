@@ -38,7 +38,8 @@ function useAnimatedValue(target: number, durationMs: number): number {
         startTimeRef.current = timestamp;
       }
       const elapsed = timestamp - startTimeRef.current;
-      const progress = Math.min(elapsed / durationMs, 1);
+      const safeDuration = Math.max(durationMs, 1);
+      const progress = Math.min(elapsed / safeDuration, 1);
       const easedProgress = easeOutCubic(progress);
       setValue(Math.round(easedProgress * target));
 

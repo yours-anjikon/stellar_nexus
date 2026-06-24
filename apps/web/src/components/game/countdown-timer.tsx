@@ -14,7 +14,8 @@ export function CountdownTimer({ durationSeconds, onExpire, className }: Countdo
   const { timeLeftMs } = useCountdown({ durationSeconds, onExpire });
 
   const seconds = Math.ceil(timeLeftMs / 1000);
-  const progress = (timeLeftMs / (durationSeconds * 1000)) * 100;
+  const totalMs = Math.max(durationSeconds, 1) * 1000;
+  const progress = (timeLeftMs / totalMs) * 100;
   const isLow = seconds <= 5;
 
   return (
