@@ -19,6 +19,8 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.0",
+    "pino": "^9.2.0",
+    "prom-client": "^15.1.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

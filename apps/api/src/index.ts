@@ -2,10 +2,12 @@ import express, { type NextFunction, type Request, type Response } from "express
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import client from "prom-client";
 import { env, isProduction } from "./env.js";
 import { migrate } from "./db.js";
 import { authRouter } from "./routes/auth.js";
 import { importersRouter } from "./routes/importers.js";
+import { startIndexer } from "./indexer.js";
 
 const app = express();
 
@@ -55,6 +57,17 @@ app.get("/health", (_req, res) => {
   });
 });
 
+client.collectDefaultMetrics();
+
+app.get("/metrics", async (_req, res) => {
+  try {
+    res.set("Content-Type", client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (err: any) {
+    res.status(500).end(err?.message || "Internal Metrics Error");
+  }
+});
+
 app.use("/auth/signup", authLimiter);
 app.use("/auth/login", authLimiter);
 app.use("/auth", authRouter);
@@ -67,6 +80,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 async function start() {
   await migrate();
+  await startIndexer();
   app.listen(env.PORT, () => {
     console.log(`[boot] tariffshield API on :${env.PORT}`);
     console.log(`[boot] contract: ${env.TARIFF_SHIELD_CONTRACT_ID}`);

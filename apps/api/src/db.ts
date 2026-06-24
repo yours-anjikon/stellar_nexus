@@ -54,6 +54,34 @@ export async function migrate(): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_contract_events_importer ON contract_events(importer_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS indexer_state (
+      id TEXT PRIMARY KEY,
+      last_processed_ledger INTEGER NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
   console.log("[migrate] schema ready");
+}
+
+export async function getLastProcessedLedger(): Promise<number | null> {
+  const result = await pool.query(
+    "SELECT last_processed_ledger FROM indexer_state WHERE id = $1",
+    ["default"]
+  );
+  if (!result.rowCount || result.rowCount === 0) {
+    return null;
+  }
+  return result.rows[0].last_processed_ledger;
+}
+
+export async function updateLastProcessedLedger(ledger: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO indexer_state (id, last_processed_ledger, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (id) DO UPDATE
+     SET last_processed_ledger = EXCLUDED.last_processed_ledger,
+         updated_at = now()`,
+    ["default", ledger]
+  );
 }
