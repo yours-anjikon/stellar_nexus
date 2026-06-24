@@ -1,18 +1,59 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { TariffShieldClient } from "@tariffshield/sdk";
+import client from "prom-client";
 import { env } from "./env.js";
 import { createRpcServer } from "./lib/soroban/rpcClient.js";
 
 export const platformKeypair = Keypair.fromSecret(env.PLATFORM_STELLAR_SECRET);
 export const suretyKeypair = Keypair.fromSecret(env.SURETY_STELLAR_SECRET);
 
+export const sorobanRpcCallsTotal = new client.Counter({
+  name: "soroban_rpc_calls_total",
+  help: "Total number of Soroban RPC calls made",
+  labelNames: ["method", "success"],
+});
+
+export const sorobanRpcDurationSeconds = new client.Histogram({
+  name: "soroban_rpc_duration_seconds",
+  help: "Duration of Soroban RPC calls in seconds",
+  labelNames: ["method"],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+});
+
 const rpcServer = createRpcServer(env.STELLAR_RPC_URL);
 
-export const contractClient = new TariffShieldClient({
+const baseClient = new TariffShieldClient({
   rpcUrl: env.STELLAR_RPC_URL,
   contractId: env.TARIFF_SHIELD_CONTRACT_ID,
   networkPassphrase: env.STELLAR_NETWORK_PASSPHRASE,
   server: rpcServer,
+});
+
+export const contractClient = new Proxy(baseClient, {
+  get(target, prop, receiver) {
+    const original = Reflect.get(target, prop, receiver);
+    if (typeof original === "function") {
+      return async (...args: any[]) => {
+        const methodName = String(prop);
+        const start = process.hrtime();
+        try {
+          const result = await original.apply(target, args);
+          const diff = process.hrtime(start);
+          const duration = diff[0] + diff[1] / 1e9;
+          sorobanRpcCallsTotal.inc({ method: methodName, success: "true" });
+          sorobanRpcDurationSeconds.observe({ method: methodName }, duration);
+          return result;
+        } catch (err) {
+          const diff = process.hrtime(start);
+          const duration = diff[0] + diff[1] / 1e9;
+          sorobanRpcCallsTotal.inc({ method: methodName, success: "false" });
+          sorobanRpcDurationSeconds.observe({ method: methodName }, duration);
+          throw err;
+        }
+      };
+    }
+    return original;
+  },
 });
 
 export const explorerTx = (hash: string): string =>
@@ -20,6 +61,20 @@ export const explorerTx = (hash: string): string =>
 
 export async function getCurrentLedgerSequence(): Promise<number> {
   const server = createRpcServer(env.STELLAR_RPC_URL);
-  const latest = await server.getLatestLedger();
-  return latest.sequence;
+  const methodName = "getLatestLedger";
+  const start = process.hrtime();
+  try {
+    const latest = await server.getLatestLedger();
+    const diff = process.hrtime(start);
+    const duration = diff[0] + diff[1] / 1e9;
+    sorobanRpcCallsTotal.inc({ method: methodName, success: "true" });
+    sorobanRpcDurationSeconds.observe({ method: methodName }, duration);
+    return latest.sequence;
+  } catch (err) {
+    const diff = process.hrtime(start);
+    const duration = diff[0] + diff[1] / 1e9;
+    sorobanRpcCallsTotal.inc({ method: methodName, success: "false" });
+    sorobanRpcDurationSeconds.observe({ method: methodName }, duration);
+    throw err;
+  }
 }

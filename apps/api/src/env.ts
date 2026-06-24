@@ -16,6 +16,7 @@ const Env = z.object({
   TARIFF_SHIELD_CONTRACT_ID: z.string().startsWith("C").min(56),
   PLATFORM_STELLAR_SECRET: z.string().startsWith("S").min(56),
   SURETY_STELLAR_SECRET: z.string().startsWith("S").min(56),
+  METRICS_ALLOWED_CIDR: z.string().optional(),
 });
 
 export const env = Env.parse(process.env);
