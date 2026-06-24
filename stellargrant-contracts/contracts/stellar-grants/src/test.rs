@@ -389,9 +389,8 @@ mod tests {
         let token_id = token_contract.address();
         let token_admin = token::StellarAssetClient::new(&env, &token_id);
 
-        let owner = Address::generate(&env);
-        let funder = Address::generate(&env);
-        let grant_id = 1u64;
+        let (client, admin, _) = setup_test(&env);
+        setup_admin(&client, &admin);
 
         let grant_id = client.grant_create(
             &owner,
