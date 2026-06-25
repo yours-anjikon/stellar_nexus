@@ -28,9 +28,17 @@ pub struct Campaign {
 pub enum DataKey {
     NextCampaignId,
     ContractVersion,
+    DeploymentTimestamp,
     Campaign(u64),
     Contribution(u64, Address, Address), // (campaign_id, contributor, token)
     CampaignTokenBalance(u64, Address),  // (campaign_id, token)
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeployInfo {
+    pub version: String,
+    pub deployed_at: u64,
 }
 
 #[contracttype]
@@ -105,7 +113,19 @@ impl StellarGoalVaultContract {
             panic!("deadline exceeds maximum campaign duration");
         }
         if accepted_tokens.len() == 0 {
-            panic!("at least one accepted token required");
+            panic!("accepted_tokens must not be empty");
+        }
+        
+        let mut i = 0;
+        while i < accepted_tokens.len() {
+            let mut j = i + 1;
+            while j < accepted_tokens.len() {
+                if accepted_tokens.get(i).unwrap() == accepted_tokens.get(j).unwrap() {
+                    panic!("duplicate token addresses");
+                }
+                j += 1;
+            }
+            i += 1;
         }
 
         let mut next_id: u64 = env
@@ -372,6 +392,22 @@ impl StellarGoalVaultContract {
                     .set(&DataKey::ContractVersion, &version);
                 version
             }
+        }
+    }
+
+    pub fn get_deploy_info(env: Env) -> DeployInfo {
+        let version = Self::get_version(env.clone());
+        let deployed_at: u64 = match env.storage().instance().get(&DataKey::DeploymentTimestamp) {
+            Some(ts) => ts,
+            None => {
+                let ts = env.ledger().timestamp();
+                env.storage().instance().set(&DataKey::DeploymentTimestamp, &ts);
+                ts
+            }
+        };
+        DeployInfo {
+            version,
+            deployed_at,
         }
     }
 }
