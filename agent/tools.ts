@@ -300,8 +300,25 @@ const DEFAULT_POLICY: SpendingPolicy = {
   billMonthlyBudget: 500,
   approvalThreshold: 75,
   holdTimeSeconds: 0,
+  toolFees: {
+    comparePharmacyPrices: 0.002,
+    auditBill: 0.01,
+    checkDrugInteractions: 0.001,
+  },
   notifications: { email: false, sms: false },
 };
+
+// Helper: Get tool fee from policy, throw if not configured
+function getToolFee(toolName: string): number {
+  const policy = loadPolicy();
+  const fee = policy.toolFees?.[toolName];
+  if (fee === undefined || fee === null) {
+    throw new Error(
+      `Tool fee not configured for ${toolName}. Please add it to policy.toolFees in the spending policy.`,
+    );
+  }
+  return fee;
+}
 
 export function setCurrentRecipient(recipientId: string) {
   currentRecipientId = recipientId;
@@ -532,7 +549,8 @@ export async function comparePharmacyPrices(
   zipCode: string = '90210',
 ) {
   const url = `${PHARMACY_API}/pharmacy/compare?drug=${encodeURIComponent(drugName)}&zip=${encodeURIComponent(zipCode)}`;
-  logger.info({ drug: drugName }, '[x402] paying for pharmacy price query');
+  const fee = getToolFee('comparePharmacyPrices');
+  logger.info({ drug: drugName, fee }, '[x402] paying for pharmacy price query');
 
   if (isMockNetwork()) {
     const receipt = createMockReceipt('x402:pharmacy-prices', {
@@ -545,7 +563,7 @@ export async function comparePharmacyPrices(
       protocol: {
         name: 'x402',
         mockNetwork: true,
-        price: '$0.002',
+        price: `$${fee.toFixed(3)}`,
         payTo: 'mock-pharmacy-price-api',
         receipt,
       },
@@ -580,7 +598,7 @@ export async function comparePharmacyPrices(
       savingsPercent: 56.4,
     };
     recordServiceFee(
-      0.002,
+      fee,
       `x402 query: pharmacy prices for ${drugName}`,
       'mock-pharmacy-price-api',
       receipt.stellarTxHash,
@@ -613,7 +631,7 @@ export async function comparePharmacyPrices(
   }
 
   recordServiceFee(
-    0.002,
+    fee,
     `x402 query: pharmacy prices for ${drugName}`,
     data.protocol?.payTo || 'pharmacy-price-api',
     txHash,
@@ -683,8 +701,9 @@ export async function auditBill(
     throw error;
   }
 
+  const fee = getToolFee('auditBill');
   logger.info(
-    { lineItemCount: lineItems.length },
+    { lineItemCount: lineItems.length, fee },
     '[x402] paying for bill audit',
   );
 
@@ -699,7 +718,7 @@ export async function auditBill(
       protocol: {
         name: 'x402',
         mockNetwork: true,
-        price: '$0.01',
+        price: `$${fee.toFixed(2)}`,
         payTo: 'mock-bill-audit-api',
         receipt,
       },
@@ -717,7 +736,7 @@ export async function auditBill(
       recommendation: 'Mock network audit completed. No errors detected.',
     };
     recordServiceFee(
-      0.01,
+      fee,
       'x402 query: medical bill audit',
       'mock-bill-audit-api',
       receipt.stellarTxHash,
@@ -828,8 +847,9 @@ export async function checkDrugInteractions(medications: string[]) {
   }
 
   const medsParam = medications.join(',');
+  const fee = getToolFee('checkDrugInteractions');
   logger.info(
-    { medicationCount: medications.length },
+    { medicationCount: medications.length, fee },
     '[x402] paying for drug interaction check',
   );
 
@@ -842,7 +862,7 @@ export async function checkDrugInteractions(medications: string[]) {
       protocol: {
         name: 'x402',
         mockNetwork: true,
-        price: '$0.001',
+        price: `$${fee.toFixed(3)}`,
         payTo: 'mock-drug-interaction-api',
         receipt,
       },
@@ -850,7 +870,7 @@ export async function checkDrugInteractions(medications: string[]) {
       summary: 'Mock network interaction check completed. No interactions detected.',
     };
     recordServiceFee(
-      0.001,
+      fee,
       `x402 query: drug interactions for ${medications.join(', ')}`,
       'mock-drug-interaction-api',
       receipt.stellarTxHash,
@@ -884,7 +904,7 @@ export async function checkDrugInteractions(medications: string[]) {
   }
 
   recordServiceFee(
-    0.001,
+    fee,
     `x402 query: drug interactions for ${medications.join(', ')}`,
     data.protocol?.payTo || 'drug-interaction-api',
     txHash,

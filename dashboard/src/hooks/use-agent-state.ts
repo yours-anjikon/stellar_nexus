@@ -17,6 +17,7 @@ import type {
   Tab,
   AuditLogEvent,
 } from '../components/types';
+import { usePoll } from './use-poll';
 
 const AGENT_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004';
 
@@ -58,6 +59,7 @@ export function useAgentState({ activeTab }: UseAgentStateOptions) {
   const [policyForm, setPolicyForm] = useState<PolicyForm>(DEFAULT_POLICY);
   const [policyDirty, setPolicyDirty] = useState(false);
   const [policySaved, setPolicySaved] = useState(false);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const activeTabRef = useRef(activeTab);
   const policyDirtyRef = useRef(policyDirty);
@@ -172,19 +174,34 @@ export function useAgentState({ activeTab }: UseAgentStateOptions) {
     [],
   );
 
+  // Poll spending and transactions every 3s with backoff
+  const spendingPoll = usePoll({
+    intervalMs: 3000,
+    enabled: true,
+    onPoll: async () => {
+      await fetchSpending();
+      await fetchTransactions(pageSize, currentPage * pageSize);
+    },
+    onError: (error) => {
+      console.error('[Poll] Spending/transactions poll error:', error.message);
+    },
+  });
+
+  // Poll agent info every 10s with backoff
+  const agentInfoPoll = usePoll({
+    intervalMs: 10000,
+    enabled: true,
+    onPoll: fetchAgentInfo,
+    onError: (error) => {
+      console.error('[Poll] Agent info poll error:', error.message);
+    },
+  });
+
+  // Initial fetch on mount
   useEffect(() => {
     fetchAgentInfo();
     fetchSpending();
     fetchTransactions(pageSize, currentPage * pageSize);
-    const i = setInterval(() => {
-      fetchSpending();
-      fetchTransactions(pageSize, currentPage * pageSize);
-    }, 3000);
-    const j = setInterval(fetchAgentInfo, 10000);
-    return () => {
-      clearInterval(i);
-      clearInterval(j);
-    };
   }, [fetchAgentInfo, fetchSpending, fetchTransactions, pageSize, currentPage]);
 
   const runAgentTask = useCallback(
@@ -198,11 +215,21 @@ export function useAgentState({ activeTab }: UseAgentStateOptions) {
       setLoading(true);
       setActiveTask(label);
       addLogEntry(`[${new Date().toLocaleTimeString()}] Starting: ${label}`);
+      
+      const controller = new AbortController();
+      setAbortController(controller);
+      
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        addLogEntry(`[${new Date().toLocaleTimeString()}] Agent task timed out`);
+      }, 60000);
+      
       try {
         const res = await fetch(`${AGENT_URL}/agent/run`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ task }),
+          signal: controller.signal,
         });
         if (!res.ok) {
           const errText = await res.text();
@@ -235,18 +262,33 @@ export function useAgentState({ activeTab }: UseAgentStateOptions) {
         fetchTransactions(pageSize, 0);
         fetchAgentInfo();
       } catch (err: any) {
-        addLogEntry(
-          `[${new Date().toLocaleTimeString()}] Connection error: ${err.message}`,
-        );
-        toast.error(`Connection error: ${err.message}`);
-        setAgentConnected(false);
+        if (err.name === 'AbortError') {
+          addLogEntry(
+            `[${new Date().toLocaleTimeString()}] Cancelled`,
+          );
+          toast.error('Agent task cancelled');
+        } else {
+          addLogEntry(
+            `[${new Date().toLocaleTimeString()}] Connection error: ${err.message}`,
+          );
+          toast.error(`Connection error: ${err.message}`);
+          setAgentConnected(false);
+        }
       } finally {
+        clearTimeout(timeoutId);
         setLoading(false);
         setActiveTask('');
+        setAbortController(null);
       }
     },
     [agentConnected, addLogEntry, fetchAgentInfo, fetchTransactions, pageSize],
   );
+
+  const cancelAgentTask = useCallback(() => {
+    if (abortController) {
+      abortController.abort();
+    }
+  }, [abortController]);
 
   const updatePolicy = useCallback(async (): Promise<{
     ok: boolean;
@@ -347,6 +389,7 @@ export function useAgentState({ activeTab }: UseAgentStateOptions) {
     // actions
     fetchSpending,
     runAgentTask,
+    cancelAgentTask,
     updatePolicy,
     resetAgent,
     togglePause,

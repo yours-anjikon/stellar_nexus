@@ -66,6 +66,7 @@ export interface SpendingPolicy {
   billMonthlyBudget: number;
   approvalThreshold: number; // require caregiver approval above this amount
   holdTimeSeconds: number; // time before pending approvals auto-approve
+  toolFees?: Record<string, number>; // per-tool query fees (e.g., comparePharmacyPrices: 0.002)
   notifications?: {
     email: boolean;
     sms: boolean;

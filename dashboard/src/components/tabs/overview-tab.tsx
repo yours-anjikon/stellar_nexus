@@ -14,6 +14,7 @@ export interface OverviewTabProps {
   loading: boolean;
   activeTask: string;
   onRunTask: (task: string, label: string) => void;
+  onCancelTask?: () => void;
   recipient?: RecipientProfile;
 }
 
@@ -30,6 +31,7 @@ export function OverviewTab({
   loading,
   activeTask,
   onRunTask,
+  onCancelTask,
 }: OverviewTabProps) {
   const savings = agentResult
     ? agentResult.toolCalls
@@ -145,9 +147,17 @@ export function OverviewTab({
           />
         </div>
         {loading && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-sky-600">
+          <div className="mt-4 flex items-center gap-3 text-sm text-sky-600">
             <div className="w-4 h-4 border-2 border-sky-600 border-t-transparent rounded-full animate-spin" />
             Agent working...
+            {onCancelTask && (
+              <button
+                onClick={onCancelTask}
+                className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 cursor-pointer transition-all"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         )}
       </div>

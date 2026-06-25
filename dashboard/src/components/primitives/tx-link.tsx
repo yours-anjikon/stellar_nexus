@@ -1,4 +1,4 @@
-const EXPLORER_URL = "https://stellar.expert/explorer/testnet/tx";
+import { EXPLORER_TX_URL } from "../../lib/stellar-network";
 
 export interface TxLinkProps {
   hash?: string;
@@ -29,7 +29,7 @@ export function TxLink({ hash }: TxLinkProps) {
   if (isValidHash) {
     return (
       <a
-        href={`${EXPLORER_URL}/${explorerHash}`}
+        href={`${EXPLORER_TX_URL}/${explorerHash}`}
         target="_blank"
         rel="noopener noreferrer"
         className="text-xs text-sky-600 hover:text-sky-800 underline font-mono"

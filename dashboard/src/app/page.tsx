@@ -80,6 +80,7 @@ export default function Dashboard() {
             loading={state.loading}
             activeTask={state.activeTask}
             onRunTask={state.runAgentTask}
+            onCancelTask={state.cancelAgentTask}
             recipient={recipient}
           />
         )}
