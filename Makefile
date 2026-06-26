@@ -1,4 +1,4 @@
-.PHONY: help dev test build contract-deploy db-migrate db-reset clean
+.PHONY: help dev test build contract-deploy db-migrate db-reset clean dep-graph
 
 help:
 	@echo "Available targets:"
@@ -8,6 +8,7 @@ help:
 	@echo "  contract-deploy - Deploy the Soroban contract"
 	@echo "  db-migrate      - Run database migrations"
 	@echo "  db-reset        - Drop/recreate DB, run migrations, and seed data"
+	@echo "  dep-graph       - Generate dependency graph and update docs/dep-graph.svg"
 	@echo "  clean           - Remove node_modules and build artifacts"
 
 dev:
@@ -41,6 +42,10 @@ db-reset:
 	sleep 3
 	npm run migrate
 	npm run seed
+
+dep-graph:
+	npm run dep-graph -- --format dot | dot -Tsvg -o docs/dep-graph.svg
+	@echo "Dependency graph updated: docs/dep-graph.svg"
 
 clean:
 	rm -rf node_modules

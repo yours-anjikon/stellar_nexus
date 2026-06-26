@@ -6,12 +6,12 @@
 
 A working end-to-end system on Stellar: one Soroban contract, a TypeScript SDK, a REST API, a web dashboard.
 
-| | |
-|---|---|
+|                  |                                                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Contract address | [`CBLASRVG7NRAFP2CDPVSF4WTJBKC6L4FKT2XHR3OH7CLICUBPVQ4PBBF`](https://stellar.expert/explorer/testnet/contract/CBLASRVG7NRAFP2CDPVSF4WTJBKC6L4FKT2XHR3OH7CLICUBPVQ4PBBF) |
-| Network | Stellar (Soroban RPC, testnet) |
-| Collateral token | Native XLM SAC `CDLZFC3SYJ…CYSC` (stand-in for USDC; mainnet would use Circle USDC) |
-| License | MIT |
+| Network          | Stellar (Soroban RPC, testnet)                                                                                                                                          |
+| Collateral token | Native XLM SAC `CDLZFC3SYJ…CYSC` (stand-in for USDC; mainnet would use Circle USDC)                                                                                     |
+| License          | MIT                                                                                                                                                                     |
 
 See [PITCH.md](./PITCH.md) for the market case, [ARCHITECTURE.md](./ARCHITECTURE.md) for the technical deep-dive.
 
@@ -39,7 +39,7 @@ The system runs end-to-end on Stellar, so you can exercise the full flow without
 - **~150,000** US continuous bonds in force; ~$10B aggregate face value; ~$5–10B in importer cash sitting in non-interest-bearing surety escrow accounts daily
 - At a 4–5% T-bill yield, that's **$200–400M/year of forgone yield** for importers — every year
 
-Existing surety SaaS (Roanoke, Avalon, GreatAmerican) is PDF + email driven. Nobody has a digital collateral instrument. We don't replace the surety — we replace the *collateral instrument they accept*. Same clawback authority, same regulatory posture; new cash mechanic.
+Existing surety SaaS (Roanoke, Avalon, GreatAmerican) is PDF + email driven. Nobody has a digital collateral instrument. We don't replace the surety — we replace the _collateral instrument they accept_. Same clawback authority, same regulatory posture; new cash mechanic.
 
 Pricing model: 0.25–0.5% AUM, recurring. A 100-importer pilot at $1.5M average TVL is ~$150M TVL → $750K ARR; 10,000 importers is $75M ARR.
 
@@ -51,14 +51,20 @@ tariffshield/
 ├── packages/sdk/                   TypeScript SDK wrapping the contract over Soroban RPC
 ├── apps/api/                       Express 5 + Postgres orchestrator + mock CBP CSV ingest
 ├── apps/web/                       Next.js 16 dashboard — importer + surety admin
-├── scripts/sdk-smoke.ts            Read-only smoke check against the live contract
+├── scripts/                        Deployment, upgrade, and operations tooling
+│   ├── backup-state.ts             Pre-upgrade state export to JSON + checksum
+│   ├── verify-upgrade.ts           Post-upgrade verification suite
+│   ├── rollback-upgrade.ts         Emergency rollback to previous wasm hash
+│   ├── list-wasm-hashes.ts         Deployment history query tool
+│   └── dep-graph.ts                Monorepo dependency graph generator
 ├── docker-compose.yml              Postgres on :5443
 ├── deployments.json                Contract ID + addresses + verification tx hashes
+├── docs/dep-graph.md               Package dependency visualization
 ├── Cargo.toml                      Rust workspace
 └── package.json                    npm workspaces
 ```
 
-One git repo. `npm workspaces` resolves the TypeScript packages; `cargo workspace` resolves the Rust contract. `docker compose up` brings up Postgres.
+One git repo. `npm workspaces` resolves the TypeScript packages; `cargo workspace` resolves the Rust contract. `docker compose up` brings up Postgres. See [docs/dep-graph.md](./docs/dep-graph.md) for package dependency visualization.
 
 ## Quick start with Dev Containers
 
@@ -128,14 +134,14 @@ All seven steps run as real on-chain transactions. The full set of verification 
 
 ## Stack
 
-| Layer | Choice |
-|---|---|
-| Smart contract | Rust 1.94 + soroban-sdk 22 + stellar CLI 25.2 |
-| Contract tests | `cargo test` (14 unit tests, all pass) |
-| SDK | TypeScript 5 + `@stellar/stellar-sdk` 15 (Soroban RPC) |
-| API | Express 5 + Postgres 17 + bcryptjs + JWT + Zod + helmet + rate-limit + CORS |
-| Web | Next.js 16 + Tailwind v4 (App Router, Turbopack) |
-| Deploy | Render (API) + Vercel (web) + Neon (Postgres) + Stellar (contract) |
+| Layer          | Choice                                                                      |
+| -------------- | --------------------------------------------------------------------------- |
+| Smart contract | Rust 1.94 + soroban-sdk 22 + stellar CLI 25.2                               |
+| Contract tests | `cargo test` (14 unit tests, all pass)                                      |
+| SDK            | TypeScript 5 + `@stellar/stellar-sdk` 15 (Soroban RPC)                      |
+| API            | Express 5 + Postgres 17 + bcryptjs + JWT + Zod + helmet + rate-limit + CORS |
+| Web            | Next.js 16 + Tailwind v4 (App Router, Turbopack)                            |
+| Deploy         | Render (API) + Vercel (web) + Neon (Postgres) + Stellar (contract)          |
 
 ## What's intentionally out of scope
 
