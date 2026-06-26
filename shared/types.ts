@@ -66,6 +66,14 @@ export interface SpendingPolicy {
   billMonthlyBudget: number;
   approvalThreshold: number; // require caregiver approval above this amount
   holdTimeSeconds: number; // time before pending approvals auto-approve
+  /**
+   * IANA timezone string for the caregiver's local day (Issue #207).
+   * Example: "America/Phoenix", "America/New_York", "Europe/London".
+   * When set, daily-limit checks use this timezone to determine "today"
+   * rather than UTC or the global SPENDING_TIMEZONE env var.
+   * Defaults to the SPENDING_TIMEZONE env var if omitted.
+   */
+  timezone?: string;
   toolFees?: Record<string, number>; // per-tool query fees (e.g., comparePharmacyPrices: 0.002)
   notifications?: {
     email: boolean;

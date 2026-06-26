@@ -19,6 +19,19 @@ const FIELDS: Array<[keyof SpendingPolicyInput, string]> = [
   ["holdTimeSeconds", "Hold Time Before Auto-Approval (seconds)"],
 ];
 
+/** Per-field HTML input constraints — kept in sync with schemas.ts (#211). */
+const FIELD_CONFIG: Record<
+  keyof SpendingPolicyInput,
+  { min: number; max: number; step: number }
+> = {
+  dailyLimit:              { min: 1, max: 50000, step: 1 },
+  monthlyLimit:            { min: 1, max: 50000, step: 1 },
+  medicationMonthlyBudget: { min: 1, max: 50000, step: 1 },
+  billMonthlyBudget:       { min: 1, max: 50000, step: 1 },
+  approvalThreshold:       { min: 1, max: 50000, step: 1 },
+  holdTimeSeconds:         { min: 0, max: 86400, step: 1 },
+};
+
 export interface PolicyTabProps {
   recipient: RecipientProfile;
   policyForm: SpendingPolicyInput;
@@ -97,9 +110,9 @@ export function PolicyTab({
                 id={inputId}
                 type="number"
                 inputMode="decimal"
-                min="0"
-                max="10000"
-                step="0.01"
+                min={FIELD_CONFIG[key].min}
+                max={FIELD_CONFIG[key].max}
+                step={FIELD_CONFIG[key].step}
                 value={Number.isFinite(policyForm[key]) ? policyForm[key] : ""}
                 aria-invalid={Boolean(errMsg)}
                 aria-describedby={errMsg || warnMsg ? errorId : undefined}

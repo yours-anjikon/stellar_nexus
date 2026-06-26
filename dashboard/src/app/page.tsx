@@ -18,11 +18,22 @@ import { WalletTab } from "../components/tabs/wallet-tab";
 import { DASHBOARD_TABS, type Tab } from "../components/types";
 import { useAgentState } from "../hooks/use-agent-state";
 import { useProfile } from "../lib/useProfile";
+import { ConfigErrorPage } from "../components/config-error-page";
+import { AGENT_URL } from "../lib/agent-url";
+
 
 export default function Dashboard() {
+  // In production, AGENT_URL is null when NEXT_PUBLIC_API_URL is unset.
+  // Show a configuration error page rather than a confusing connection failure
+  // to localhost (#222).
+  if (AGENT_URL === null) {
+    return <ConfigErrorPage />;
+  }
+
   const { recipient, caregiver, updateProfile } = useProfile();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
 
   const recipientInitials = recipient.name
     .split(" ")

@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { Btn } from "../primitives/btn";
 import { Card } from "../primitives/card";
 import type { Transaction } from "../types";
+import { AGENT_URL } from "../../lib/agent-url";
 
-const AGENT_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 
 export interface ApprovalsTabProps {
   agentConnected: boolean;

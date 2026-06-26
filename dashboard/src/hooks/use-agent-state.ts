@@ -18,8 +18,8 @@ import type {
   AuditLogEvent,
 } from '../components/types';
 import { usePoll } from './use-poll';
+import { AGENT_URL } from '../lib/agent-url';
 
-const AGENT_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3004';
 
 const DEFAULT_POLICY = {
   dailyLimit: 100,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CaregiverProfile, RecipientProfile } from "./types";
+import { AGENT_URL } from "./agent-url";
 
-const AGENT_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 
 const DEFAULT_RECIPIENT: RecipientProfile = {
   name: "Rosa Garcia",

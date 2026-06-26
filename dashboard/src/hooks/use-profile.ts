@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
+import { AGENT_URL } from "../lib/agent-url";
 
-const AGENT_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3004";
 
 export interface RecipientProfile {
   name: string;
