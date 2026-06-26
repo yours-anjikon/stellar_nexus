@@ -2,7 +2,9 @@
  * CareGuard Agent Tools — Real payment integrations on Stellar testnet
  *
  * Supports multiple care recipients via per-recipient data directories.
- *   data/recipients/<recipientId>/spending.json
+ *   data/recipients/<recipientId>/spending.json        (legacy, kept for compat)
+ *   data/recipients/<recipientId>/transactions.jsonl   (append-only log, one JSON line per tx)
+ *   data/recipients/<recipientId>/spending.snapshot.json (compacted every 100 transactions)
  *   data/recipients/<recipientId>/orders.json
  *   data/recipients/<recipientId>/policy.json
  *
@@ -13,10 +15,19 @@
  *   ⚠️  DO NOT COMMIT files under data/recipients/ — they contain
  *   live balances and transaction history. Add them to .gitignore and never
  *   include them in a PR. See data/README.md for details.
+ *
+ * Persistence strategy (Issue #205):
+ *   - New transactions are appended as single JSON lines to transactions.jsonl.
+ *   - Every SNAPSHOT_INTERVAL (100) transactions the full tracker state is
+ *     compacted into spending.snapshot.json via an atomic rename.
+ *   - On read: load the snapshot, then replay only the tail of the JSONL that
+ *     was appended after the last compaction.
+ *   - spending.json is still written on full saves for backward compatibility
+ *     with any tooling that reads it directly.
  */
 
 import 'dotenv/config';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { z } from 'zod';
 import { logger } from '../shared/logger.ts';
 import { resolveStellarNetwork, validateSignerKeyForNetwork } from '../shared/stellar-network.ts';
@@ -355,6 +366,14 @@ function getRecipientDir(recipientId: string): string {
 function getSpendingFile(recipientId?: string): string {
   return `${getRecipientDir(recipientId || currentRecipientId)}/spending.json`;
 }
+/** Append-only JSONL log — one line per transaction (Issue #205). */
+function getTransactionLogFile(recipientId?: string): string {
+  return `${getRecipientDir(recipientId || currentRecipientId)}/transactions.jsonl`;
+}
+/** Periodic compaction snapshot written every SNAPSHOT_INTERVAL transactions (Issue #205). */
+function getSnapshotFile(recipientId?: string): string {
+  return `${getRecipientDir(recipientId || currentRecipientId)}/spending.snapshot.json`;
+}
 function getPolicyFile(recipientId?: string): string {
   return `${getRecipientDir(recipientId || currentRecipientId)}/policy.json`;
 }
@@ -405,6 +424,8 @@ type SpendingPolicyInput = Partial<SpendingPolicy> & {
 };
 
 const SPENDING_CACHE_TTL_MS = 5000;
+/** Compact the JSONL log into a snapshot every this many transactions (Issue #205). */
+export const SNAPSHOT_INTERVAL = 100;
 
 type SpendingCacheEntry = {
   data: SpendingTracker;
@@ -450,11 +471,63 @@ function normalizeTransactionCategories(
   };
 }
 
+/**
+ * Read spending state from disk using the snapshot + JSONL tail strategy (Issue #205).
+ *
+ * Load order:
+ *  1. spending.snapshot.json  — compacted base state
+ *  2. transactions.jsonl tail — lines appended after the snapshot was written
+ *  3. spending.json fallback   — legacy full-file for backward compatibility
+ */
 function readSpendingFromDisk(recipientId?: string): SpendingTracker {
-  const file = getSpendingFile(recipientId);
-  if (!existsSync(file)) return createEmptySpendingTracker();
+  const snapshotFile = getSnapshotFile(recipientId);
+  const logFile = getTransactionLogFile(recipientId);
+  const legacyFile = getSpendingFile(recipientId);
+
+  // --- Try new snapshot + JSONL tail path first ---
+  if (existsSync(snapshotFile)) {
+    try {
+      const snapshot = JSON.parse(readFileSync(snapshotFile, 'utf-8')) as SpendingTracker & { _snapshotTxCount?: number };
+      const snapshotTxCount = snapshot._snapshotTxCount ?? snapshot.transactions.length;
+
+      // Replay transactions from the JSONL tail that came after the snapshot
+      const tailTxs: Transaction[] = [];
+      if (existsSync(logFile)) {
+        const raw = readFileSync(logFile, 'utf-8');
+        const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+        // Skip the lines already captured in the snapshot
+        for (let i = snapshotTxCount; i < lines.length; i++) {
+          try {
+            tailTxs.push(JSON.parse(lines[i]) as Transaction);
+          } catch {
+            logger.warn({ line: i }, '[Persistence] Skipping malformed JSONL line');
+          }
+        }
+      }
+
+      const merged: SpendingTracker = {
+        medications: snapshot.medications,
+        bills: snapshot.bills,
+        serviceFees: snapshot.serviceFees,
+        transactions: [...snapshot.transactions, ...tailTxs],
+      };
+      const normalized = normalizeTransactionCategories(merged, recipientId);
+      if (normalized.migrated) {
+        saveSpending(normalized.data, recipientId);
+      }
+      return normalized.data;
+    } catch (err: any) {
+      logger.warn(
+        { file: snapshotFile, error: err.message },
+        '[Persistence] spending.snapshot.json is corrupted; falling back to legacy file',
+      );
+    }
+  }
+
+  // --- Legacy fallback: spending.json (full JSON blob) ---
+  if (!existsSync(legacyFile)) return createEmptySpendingTracker();
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as SpendingTracker;
+    const parsed = JSON.parse(readFileSync(legacyFile, 'utf-8')) as SpendingTracker;
     const normalized = normalizeTransactionCategories(parsed, recipientId);
     if (normalized.migrated) {
       saveSpending(normalized.data, recipientId);
@@ -462,7 +535,7 @@ function readSpendingFromDisk(recipientId?: string): SpendingTracker {
     return normalized.data;
   } catch (err: any) {
     logger.warn(
-      { file, error: err.message },
+      { file: legacyFile, error: err.message },
       '[Persistence] spending.json is corrupted; falling back to an empty tracker',
     );
     return createEmptySpendingTracker();
@@ -483,11 +556,64 @@ export function loadSpending(recipientId?: string): SpendingTracker {
   return data;
 }
 
+/**
+ * Append a single transaction as one JSON line to transactions.jsonl (Issue #205).
+ * This is O(1) per call — no full-file rewrite.
+ * Also triggers compaction every SNAPSHOT_INTERVAL transactions.
+ */
+export function appendTransaction(tx: Transaction, recipientId?: string): void {
+  const logFile = getTransactionLogFile(recipientId);
+  appendFileSync(logFile, JSON.stringify(tx) + '\n', 'utf-8');
+
+  // Compact into a snapshot every SNAPSHOT_INTERVAL transactions
+  const totalTxs = spendingTracker.transactions.length;
+  if (totalTxs > 0 && totalTxs % SNAPSHOT_INTERVAL === 0) {
+    compactSnapshot(spendingTracker, recipientId);
+  }
+}
+
+/**
+ * Write a periodic compaction snapshot so the JSONL tail stays short (Issue #205).
+ * Uses an atomic rename to avoid partial writes.
+ */
+export function compactSnapshot(data: SpendingTracker, recipientId?: string): void {
+  const snapshotFile = getSnapshotFile(recipientId);
+  const tempFile = `${snapshotFile}.tmp-${Date.now()}`;
+  const payload = {
+    ...data,
+    // Record how many JSONL lines this snapshot covers so the read path
+    // knows where the tail starts.
+    _snapshotTxCount: data.transactions.length,
+  };
+  writeFileSync(tempFile, JSON.stringify(payload, null, 2), 'utf-8');
+  renameSync(tempFile, snapshotFile);
+  logger.info(
+    { txCount: data.transactions.length, recipientId: recipientId || currentRecipientId },
+    '[Persistence] Compacted spending snapshot',
+  );
+}
+
+/**
+ * Full save: writes the legacy spending.json for backward compatibility and
+ * also seeds the snapshot + JSONL files if they don't exist yet (Issue #205).
+ */
 export function saveSpending(data: SpendingTracker, recipientId?: string) {
+  // 1. Legacy full-file (backward compat for external tooling)
   const file = getSpendingFile(recipientId);
   const tempFile = `${file}.tmp-${Date.now()}`;
   writeFileSync(tempFile, JSON.stringify(data, null, 2));
   renameSync(tempFile, file);
+
+  // 2. Write / refresh the snapshot file so the new read path can find state
+  compactSnapshot(data, recipientId);
+
+  // 3. Seed the JSONL log with all current transactions if it doesn't exist
+  const logFile = getTransactionLogFile(recipientId);
+  if (!existsSync(logFile)) {
+    const lines = data.transactions.map((tx) => JSON.stringify(tx)).join('\n');
+    writeFileSync(logFile, lines.length > 0 ? lines + '\n' : '', 'utf-8');
+  }
+
   spendingCache.set(recipientId || currentRecipientId, {
     data,
     loadedAt: Date.now(),
@@ -511,7 +637,7 @@ function recordServiceFee(
 ) {
   x402SettlementsTotal.inc();
   spendingTracker.serviceFees += amount;
-  spendingTracker.transactions.push({
+  const tx: Transaction = {
     id: `tx-${Date.now()}`,
     timestamp: new Date().toISOString(),
     type: 'service_fee',
@@ -521,13 +647,15 @@ function recordServiceFee(
     stellarTxHash,
     status: 'completed',
     category: TRANSACTION_CATEGORY.SERVICE_FEES,
-  });
+  };
+  spendingTracker.transactions.push(tx);
   agentTransactionsTotal.inc({ status: 'completed' });
   agentSpendingUsd.set(
     { category: TRANSACTION_CATEGORY.SERVICE_FEES },
     spendingTracker.serviceFees,
   );
-  saveSpending(spendingTracker);
+  // Append the single transaction — O(1) — instead of rewriting the whole file
+  appendTransaction(tx);
 }
 
 function loadPolicy(recipientId?: string): SpendingPolicy {
@@ -1395,7 +1523,8 @@ export async function payForMedication(
     };
     spendingTracker.transactions.push(tx);
     agentTransactionsTotal.inc({ status: 'pending' });
-    saveSpending(spendingTracker);
+    // Append only the new pending transaction — O(1) write (Issue #205)
+    appendTransaction(tx);
     return {
       success: false,
       error: `REQUIRES CAREGIVER APPROVAL: $${amount.toFixed(2)} exceeds the $${currentPolicy.approvalThreshold} approval threshold.`,
@@ -1434,7 +1563,8 @@ export async function payForMedication(
     { category: TRANSACTION_CATEGORY.MEDICATIONS },
     spendingTracker.medications,
   );
-  saveSpending(spendingTracker);
+  // Append only the new completed transaction — O(1) write (Issue #205)
+  appendTransaction(tx);
 
   // Schedule adherence reminder (Issue #264)
   const reminderDate = new Date(Date.now() + daysSupply * 24 * 60 * 60 * 1000).toISOString();
@@ -1505,7 +1635,8 @@ export async function payBill(
     };
     spendingTracker.transactions.push(tx);
     agentTransactionsTotal.inc({ status: 'pending' });
-    saveSpending(spendingTracker);
+    // Append only the new pending transaction — O(1) write (Issue #205)
+    appendTransaction(tx);
     return {
       success: false,
       error: `REQUIRES CAREGIVER APPROVAL: $${amount.toFixed(2)} exceeds the $${currentPolicy.approvalThreshold} approval threshold.`,
@@ -1591,7 +1722,8 @@ export async function payBill(
   spendingTracker.transactions.push(tx);
   agentTransactionsTotal.inc({ status: 'completed' });
   agentSpendingUsd.set({ category: TRANSACTION_CATEGORY.BILLS }, spendingTracker.bills);
-  saveSpending(spendingTracker);
+  // Append only the new completed transaction — O(1) write (Issue #205)
+  appendTransaction(tx);
 
   // Notify on significant payment (Issue #265)
   if (amount > currentPolicy.approvalThreshold) {

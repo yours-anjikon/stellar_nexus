@@ -42,6 +42,18 @@ vi.mock("fs", () => ({
     }
     fsState.files.set(key, String(data));
   }),
+  appendFileSync: vi.fn((filePath: string, data: string) => {
+    const key = String(filePath);
+    for (const blocked of fsState.readOnlyPaths) {
+      if (key.includes(blocked)) {
+        const err: any = new Error(`EACCES: permission denied, open '${key}'`);
+        err.code = "EACCES";
+        throw err;
+      }
+    }
+    const existing = fsState.files.get(key) ?? "";
+    fsState.files.set(key, existing + String(data));
+  }),
   existsSync: vi.fn((filePath: string) => fsState.files.has(String(filePath))),
   mkdirSync: vi.fn(),
   renameSync: vi.fn((oldPath: string, newPath: string) => {
@@ -225,5 +237,138 @@ describe("Permission errors produce a clean error with no partial writes (#44)",
       key.includes("readonly-recipient"),
     );
     expect(wroteAnything).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #205 — Append-only transaction log acceptance criteria
+// ---------------------------------------------------------------------------
+
+describe("Append-only JSONL transaction log (#205)", () => {
+  it("appendTransaction writes exactly one JSON line per call", async () => {
+    vi.resetModules();
+    const tools = await import("../tools.ts");
+
+    const logKey = `${DATA_DIR}/recipients/rosa/transactions.jsonl`;
+
+    // Seed a minimal snapshot so the JSONL file path is exercised
+    tools.saveSpending(freshTracker(0), "rosa");
+    // Clear the seeded JSONL so we start from empty
+    fsState.files.set(logKey, "");
+
+    const tx = {
+      id: "tx-test-1",
+      timestamp: new Date().toISOString(),
+      type: "medication" as const,
+      description: "Test medication",
+      amount: 10,
+      recipient: "pharm-1",
+      status: "completed" as const,
+      category: TRANSACTION_CATEGORY.MEDICATIONS,
+    };
+
+    tools.appendTransaction(tx, "rosa");
+
+    const logContents = fsState.files.get(logKey) ?? "";
+    const lines = logContents.split("\n").filter((l) => l.trim().length > 0);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({ id: "tx-test-1", amount: 10 });
+  });
+
+  it("1000 transactions complete in < 1s with proportional disk growth", async () => {
+    vi.resetModules();
+    const tools = await import("../tools.ts");
+
+    const logKey = `${DATA_DIR}/recipients/perf-recipient/transactions.jsonl`;
+    tools.saveSpending(freshTracker(0), "perf-recipient");
+    fsState.files.set(logKey, "");
+
+    const count = 1000;
+    const startMs = performance.now();
+
+    for (let i = 0; i < count; i++) {
+      const tx = {
+        id: `tx-${i}`,
+        timestamp: new Date().toISOString(),
+        type: "medication" as const,
+        description: `Medication ${i}`,
+        amount: 1,
+        recipient: "pharm-1",
+        status: "completed" as const,
+        category: TRANSACTION_CATEGORY.MEDICATIONS,
+      };
+      tools.appendTransaction(tx, "perf-recipient");
+    }
+
+    const elapsedMs = performance.now() - startMs;
+    expect(elapsedMs).toBeLessThan(1000);
+
+    // Disk growth should be proportional: each line is roughly the tx JSON length
+    const logContents = fsState.files.get(logKey) ?? "";
+    const lines = logContents.split("\n").filter((l) => l.trim().length > 0);
+    expect(lines.length).toBe(count);
+  });
+
+  it("compactSnapshot writes a snapshot with _snapshotTxCount", async () => {
+    vi.resetModules();
+    const tools = await import("../tools.ts");
+
+    const snapshotKey = `${DATA_DIR}/recipients/rosa/spending.snapshot.json`;
+    const tracker = freshTracker(3);
+    tools.compactSnapshot(tracker, "rosa");
+
+    const raw = fsState.files.get(snapshotKey);
+    expect(raw).toBeDefined();
+    const parsed = JSON.parse(raw!);
+    expect(parsed._snapshotTxCount).toBe(3);
+    expect(parsed.medications).toBe(tracker.medications);
+  });
+
+  it("read path merges snapshot + JSONL tail correctly", async () => {
+    vi.resetModules();
+    const tools = await import("../tools.ts");
+
+    const snapshotKey = `${DATA_DIR}/recipients/merge-recipient/spending.snapshot.json`;
+    const logKey = `${DATA_DIR}/recipients/merge-recipient/transactions.jsonl`;
+
+    // Seed a snapshot with 2 transactions
+    const baseTxs = Array.from({ length: 2 }, (_, i) => ({
+      id: `tx-base-${i}`,
+      timestamp: new Date().toISOString(),
+      type: "medication" as const,
+      description: `Base ${i}`,
+      amount: 5,
+      recipient: "pharm-1",
+      status: "completed" as const,
+      category: TRANSACTION_CATEGORY.MEDICATIONS,
+    }));
+    const snapshotData = {
+      medications: 10,
+      bills: 0,
+      serviceFees: 0,
+      transactions: baseTxs,
+      _snapshotTxCount: 2,
+    };
+    fsState.files.set(snapshotKey, JSON.stringify(snapshotData));
+
+    // Seed 1 extra transaction in the JSONL tail (line index 2)
+    const tailTx = {
+      id: "tx-tail-0",
+      timestamp: new Date().toISOString(),
+      type: "medication" as const,
+      description: "Tail tx",
+      amount: 7,
+      recipient: "pharm-1",
+      status: "completed" as const,
+      category: TRANSACTION_CATEGORY.MEDICATIONS,
+    };
+    // JSONL: first 2 lines = base (snapshot covers them), 3rd line = tail
+    const jsonlContent = [...baseTxs, tailTx].map((t) => JSON.stringify(t)).join("\n") + "\n";
+    fsState.files.set(logKey, jsonlContent);
+
+    const loaded = tools.loadSpending("merge-recipient");
+    // Invalidate the 5s cache by resetting modules, which re-runs the loader
+    expect(loaded.transactions).toHaveLength(3);
+    expect(loaded.transactions[2].id).toBe("tx-tail-0");
   });
 });

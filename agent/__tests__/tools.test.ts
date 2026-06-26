@@ -13,15 +13,25 @@ const { mockMppFetch, onProgressHolder, MOCK_HINT } = vi.hoisted(() => {
 
 vi.mock("dotenv/config", () => ({}));
 vi.mock("fs", () => ({
-  readFileSync: vi.fn((filePath: string) =>
-    String(filePath).includes("spending.json")
-      ? JSON.stringify({ medications: 0, bills: 0, serviceFees: 0, transactions: [] })
-      : "{}",
-  ),
+  readFileSync: vi.fn((filePath: string) => {
+    const key = String(filePath);
+    // Snapshot file: return a minimal snapshot so the new read path works
+    if (key.includes("spending.snapshot.json")) {
+      return JSON.stringify({ medications: 0, bills: 0, serviceFees: 0, transactions: [], _snapshotTxCount: 0 });
+    }
+    if (key.includes("spending.json")) {
+      return JSON.stringify({ medications: 0, bills: 0, serviceFees: 0, transactions: [] });
+    }
+    return "{}";
+  }),
   writeFileSync: vi.fn(),
   appendFileSync: vi.fn(),
   unlinkSync: vi.fn(),
-  existsSync: vi.fn((filePath: string) => String(filePath).includes("spending.json")),
+  existsSync: vi.fn((filePath: string) => {
+    const key = String(filePath);
+    // Expose snapshot files so the read path takes the new snapshot branch
+    return key.includes("spending.snapshot.json") || key.includes("spending.json");
+  }),
   mkdirSync: vi.fn(),
   renameSync: vi.fn(),
 }));
