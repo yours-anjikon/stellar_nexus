@@ -10,7 +10,7 @@
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN, Env,
-    Symbol, Vec,
+    Symbol, Vec, InvokeContract,
 };
 
 mod errors;
@@ -30,6 +30,8 @@ pub enum DataKey {
     Account(Address),
     Proposal(u64),
     ProposalCounter,
+    PriceOracle,
+    Version,
 }
 
 #[contracttype]
@@ -137,20 +139,61 @@ impl TariffShieldContract {
         );
     }
 
-    pub fn set_required_collateral(env: Env, importer: Address, new_required: i128) {
+    pub fn set_required_collateral(
+        env: Env,
+        importer: Address,
+        new_required: i128,
+        price_oracle_contract: Option<Address>,
+        bypass_rate_limit: bool,
+    ) {
         let admin = get_admin(&env);
         admin.require_auth();
         if new_required < 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
         let mut acct = load_account(&env, &importer);
+        let current_timestamp = env.ledger().timestamp();
+
+        let cooldown_seconds: u64 = 86400;
+        if !bypass_rate_limit && acct.collateral_last_updated > 0 {
+            if current_timestamp < acct.collateral_last_updated + cooldown_seconds {
+                let retry_after = acct.collateral_last_updated + cooldown_seconds;
+                env.events().publish(
+                    (symbol_short!("ratelimit"), importer.clone()),
+                    retry_after,
+                );
+                panic_with_error!(&env, Error::RateLimitExceededError);
+            }
+        }
+
+        let oracle_rate: i128 = if let Some(oracle_addr) = price_oracle_contract.clone() {
+            get_usdc_usd_rate(&env, &oracle_addr)
+        } else if let Some(oracle_addr) = get_price_oracle_optional(&env) {
+            get_usdc_usd_rate(&env, &oracle_addr)
+        } else {
+            10000
+        };
+
+        let adjusted_required = if oracle_rate != 10000 {
+            ((new_required as i128) * 10000) / oracle_rate
+        } else {
+            new_required
+        };
+
+        if oracle_rate < 9800 || oracle_rate > 10200 {
+            env.events().publish(
+                (symbol_short!("depeg"), importer.clone()),
+                oracle_rate,
+            );
+        }
+
         let old_required = acct.required_collateral;
-        acct.required_collateral = new_required;
-        acct.collateral_last_updated = env.ledger().timestamp();
+        acct.required_collateral = adjusted_required;
+        acct.collateral_last_updated = current_timestamp;
         save_account(&env, &importer, &acct);
         env.events().publish(
             (symbol_short!("required"), importer.clone()),
-            (old_required, new_required),
+            (old_required, adjusted_required),
         );
     }
 
@@ -334,8 +377,35 @@ impl TariffShieldContract {
         );
     }
 
+    pub fn set_price_oracle(env: Env, oracle: Address) {
+        let admin = get_admin(&env);
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::PriceOracle, &oracle);
+        env.events().publish((symbol_short!("oracle"), oracle.clone()), ());
+    }
+
+    pub fn get_price_oracle(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PriceOracle)
+    }
+
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        let admin = get_admin(&env);
+        admin.require_auth();
+        let old_version = env.storage()
+            .instance()
+            .get::<_, Symbol>(&DataKey::Version)
+            .unwrap_or_else(|| symbol_short!("v0_2_0"));
+        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
+        let new_version = symbol_short!("v0_3_0");
+        env.storage().instance().set(&DataKey::Version, &new_version);
+        env.events().publish(
+            (symbol_short!("upgrade"), new_wasm_hash),
+            (old_version, new_version, env.ledger().timestamp()),
+        );
+    }
+
     pub fn version() -> Symbol {
-        symbol_short!("v0_2_0")
+        symbol_short!("v0_3_0")
     }
 }
 
@@ -400,5 +470,21 @@ fn require_fresh_collateral(env: &Env, importer: &Address, acct: &Account) {
         env.events().publish((symbol_short!("stale"), importer.clone()), expiry);
         panic_with_error!(env, Error::StaleOracleError);
     }
+}
+
+fn get_price_oracle_optional(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::PriceOracle)
+}
+
+fn get_usdc_usd_rate(env: &Env, oracle: &Address) -> i128 {
+    use soroban_sdk::InvokeContract;
+
+    let rate: i128 = env
+        .invoke_contract(
+            oracle,
+            &symbol_short!("get_usdc_usd_rate"),
+            soroban_sdk::Vec::new(env),
+        );
+    rate
 }
 

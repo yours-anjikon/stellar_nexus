@@ -273,27 +273,45 @@ importersRouter.post("/:id/upload-tariff-csv", async (req: Request, res: Respons
   // Token is XLM in the demo (1 USD ≈ 1 XLM for stand-in); 7 decimals.
   const requiredStroops = BigInt(Math.round(requiredCollateralUSD * 1e7));
 
-  const onChain = await contractClient.setRequiredCollateral(
-    platformKeypair,
-    importer.stellar_address,
-    requiredStroops,
-  );
-  await pool.query(
-    "INSERT INTO tariff_uploads (importer_id, filename, annual_duty_total, computed_required_collateral, applied_tx) VALUES ($1, $2, $3, $4, $5)",
-    [importer.id, parse.data.filename ?? null, annualDutyTotal, requiredStroops.toString(), onChain.txHash],
-  );
-  await pool.query(
-    "INSERT INTO contract_events (importer_id, kind, amount, tx_hash) VALUES ($1, 'required_changed', $2, $3)",
-    [importer.id, requiredStroops.toString(), onChain.txHash],
-  );
+  try {
+    const onChain = await contractClient.setRequiredCollateral(
+      platformKeypair,
+      importer.stellar_address,
+      requiredStroops,
+      env.PRICE_ORACLE_CONTRACT_ID,
+      false,
+    );
+    await pool.query(
+      "INSERT INTO tariff_uploads (importer_id, filename, annual_duty_total, computed_required_collateral, applied_tx) VALUES ($1, $2, $3, $4, $5)",
+      [importer.id, parse.data.filename ?? null, annualDutyTotal, requiredStroops.toString(), onChain.txHash],
+    );
+    await pool.query(
+      "INSERT INTO contract_events (importer_id, kind, amount, tx_hash) VALUES ($1, 'required_changed', $2, $3)",
+      [importer.id, requiredStroops.toString(), onChain.txHash],
+    );
 
-  res.json({
-    annualDutyTotal,
-    bondFaceValue,
-    requiredCollateralStroops: requiredStroops.toString(),
-    txHash: onChain.txHash,
-    txUrl: explorerTx(onChain.txHash),
-  });
+    res.json({
+      annualDutyTotal,
+      bondFaceValue,
+      requiredCollateralStroops: requiredStroops.toString(),
+      txHash: onChain.txHash,
+      txUrl: explorerTx(onChain.txHash),
+    });
+  } catch (err: any) {
+    const errMsg = String(err);
+    if (errMsg.includes("Error(Contract, #13)") || errMsg.includes("RateLimitExceeded")) {
+      const retryAfter = Math.ceil(Date.now() / 1000) + 86400;
+      res.status(429)
+        .set("Retry-After", String(retryAfter))
+        .json({
+          error: "rate limit exceeded",
+          retryAfter,
+          message: "collateral requirements can only be updated once per 24 hours",
+        });
+      return;
+    }
+    throw err;
+  }
 });
 
 const DepositSchema = z.object({

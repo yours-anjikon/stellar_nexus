@@ -286,11 +286,91 @@ fn stale_collateral_blocks_deposit() {
         li.timestamp = 100;
     });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    
+
     // Fast forward 366 days
     s.env.ledger().with_mut(|li| {
         li.timestamp = 100 + 366 * 86400;
     });
-    
+
     s.client.deposit_collateral(&s.importer, &s.funder, &1_0000000);
+}
+
+#[test]
+fn rate_limit_first_update_allowed() {
+    let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+    s.client.register_importer(&s.importer, &1, &100_000_0000000);
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+    assert_eq!(s.client.get_account(&s.importer).required_collateral, 150_000_0000000);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #13)")] // RateLimitExceededError
+fn rate_limit_blocks_second_update_within_24h() {
+    let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+    s.client.register_importer(&s.importer, &1, &100_000_0000000);
+
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + 43200;
+    });
+
+    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
+}
+
+#[test]
+fn rate_limit_allows_update_after_24h() {
+    let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+    s.client.register_importer(&s.importer, &1, &100_000_0000000);
+
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + 86400;
+    });
+
+    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
+    assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
+}
+
+#[test]
+fn rate_limit_emergency_bypass_overrides_cooldown() {
+    let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+    s.client.register_importer(&s.importer, &1, &100_000_0000000);
+
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + 43200;
+    });
+
+    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &true);
+    assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
+}
+
+#[test]
+fn upgrade_entrypoint_updates_wasm_and_version() {
+    let s = setup();
+    let hash = soroban_sdk::BytesN::from_array(&s.env, &[42; 32]);
+    s.client.upgrade(&hash);
+}
+
+#[test]
+fn set_and_get_price_oracle() {
+    let s = setup();
+    let oracle = Address::generate(&s.env);
+    s.client.set_price_oracle(&oracle);
+    assert_eq!(s.client.get_price_oracle().unwrap(), oracle);
 }

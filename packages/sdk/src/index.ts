@@ -110,11 +110,23 @@ export class TariffShieldClient {
     signer: Keypair,
     importer: string,
     newRequired: bigint,
+    priceOracleContract?: string,
+    bypassRateLimit?: boolean,
   ): Promise<InvokeResult<null>> {
-    return this.invokeAndSubmit(signer, "set_required_collateral", [
+    const args = [
       addressToScVal(importer),
       nativeToScVal(newRequired, { type: "i128" }),
-    ]);
+    ];
+
+    if (priceOracleContract) {
+      args.push(nativeToScVal({ Some: addressToScVal(priceOracleContract) }, { type: "option" }));
+    } else {
+      args.push(nativeToScVal(null, { type: "option" }));
+    }
+
+    args.push(nativeToScVal(bypassRateLimit ?? false, { type: "bool" }));
+
+    return this.invokeAndSubmit(signer, "set_required_collateral", args);
   }
 
   async autoTopUp(signer: Keypair, importer: string): Promise<InvokeResult<bigint>> {
