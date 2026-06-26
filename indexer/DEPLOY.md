@@ -77,14 +77,32 @@ curl "localhost:8080/agents?capability=vision"
 
 Render injects `$PORT`; the container already binds it.
 
-### Free-plan note
-Render's free web service **sleeps after ~15 min idle**, which also pauses the
-in-process worker. That's fine for a demo: on the next request it wakes and the
-worker resumes from its Firestore cursor (no gaps, no dupes), and the SDK/CLI
-fall back to the on-chain scan while it's asleep. For a *continuously* fresh
-cache, use a paid instance, or split the worker into a separate Render
-**Background Worker** with start command `python -m indexer.worker` (same image
-and env, drop `RUN_INDEXER_WORKER` on the web service).
+### Free-plan note (important)
+The free instance is **512 MB**. Running the ingest worker **in-process**
+(`RUN_INDEXER_WORKER=1`) alongside uvicorn + firebase-admin + gRPC OOM-kills the
+instance (symptom: routes 404 with `x-render-routing: no-server` after it served
+a few 200s). So on free tier:
+
+- Keep `RUN_INDEXER_WORKER=0` (the default in `render.yaml`). The web service is
+  then just the lightweight **read API** — stable, low memory. It still sleeps
+  after ~15 min idle and wakes (~50 s) on the next request; the SDK/CLI fall back
+  to the on-chain scan while it's asleep.
+- **Refresh the cache on demand** with the token-gated ingest endpoint (one pass,
+  then it frees memory):
+  ```bash
+  curl -X POST -H "X-Ingest-Token: $INGEST_TOKEN" \
+    https://<service>.onrender.com/admin/ingest        # incremental from cursor
+  curl -X POST -H "X-Ingest-Token: $INGEST_TOKEN" \
+    "https://<service>.onrender.com/admin/ingest?from_ledger=3200000"  # backfill
+  ```
+  Set `INGEST_TOKEN` to a random secret in the dashboard, then point a **free
+  external scheduler** (e.g. cron-job.org) at the endpoint every few minutes to
+  keep it fresh — no long-running process needed. You can also just run
+  `python -m indexer.worker --once` locally whenever you register agents.
+
+On a **paid** instance with real RAM, set `RUN_INDEXER_WORKER=1` and the worker
+runs continuously in-process (or split it into a separate Render **Background
+Worker**, start command `python -m indexer.worker`).
 
 ## After deploy — point clients at it
 

@@ -14,9 +14,10 @@ existing IDE backend app or run standalone:
 """
 
 import hashlib
+import os
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -184,6 +185,30 @@ def publish_capabilities(
 @app.get("/stats")
 def stats(store=Depends(get_store)):
     return _envelope(store, None, stats=store.stats())
+
+
+@app.post("/admin/ingest")
+def admin_ingest(
+    from_ledger: Optional[int] = None,
+    x_ingest_token: Optional[str] = Header(default=None),
+):
+    """
+    Run ONE ingest pass on demand (free-tier friendly: no always-on worker).
+
+    Gate with the `INGEST_TOKEN` env var, sent as the `X-Ingest-Token` header.
+    Point a free external scheduler (e.g. cron-job.org) at this every few minutes
+    to keep the cache fresh without a long-running worker eating the instance's
+    memory. A single pass scans from the cursor and exits, so memory is released.
+    """
+    token = os.getenv("INGEST_TOKEN")
+    if not token or x_ingest_token != token:
+        raise HTTPException(status_code=403, detail="Invalid or missing X-Ingest-Token.")
+
+    from indexer.worker import build_default_worker
+
+    network = os.getenv("MYCELIUM_NETWORK", "testnet")
+    counts = build_default_worker(network).run_once(from_ledger=from_ledger)
+    return {"ingested": counts}
 
 
 @app.get("/healthz")

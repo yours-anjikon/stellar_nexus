@@ -12,10 +12,15 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      # Run the ingest worker in-process so one service serves reads AND keeps
-      # Firestore fresh.
+      # Free tier = 512MB. An always-on ingest worker OOM-kills the instance, so
+      # keep it OFF here and refresh on demand via POST /admin/ingest (point a
+      # free external cron at it). Set to "1" only on a paid instance with RAM.
       - key: RUN_INDEXER_WORKER
-        value: "1"
+        value: "0"
+      # Shared secret for POST /admin/ingest (sent as X-Ingest-Token). Set a
+      # random value in the dashboard.
+      - key: INGEST_TOKEN
+        sync: false
       - key: MYCELIUM_NETWORK
         value: testnet
       # The deployed JobBoard (so /jobs + job events index). Registry address is
