@@ -6446,6 +6446,8 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .set(&DataKey::PoolOutcomeTotals(pool_id), &totals);
+        if outcome == 0 {
+            user_bet.amount_a = user_bet
                 .amount_a
                 .checked_add(normalized)
                 .ok_or(ContractError::UserBetOverflow)?;
