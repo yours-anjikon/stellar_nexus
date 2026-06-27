@@ -234,6 +234,66 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_authentication_attempts_email_time ON authentication_attempts(email, attempted_at DESC);
     CREATE INDEX IF NOT EXISTS idx_authentication_attempts_user_id ON authentication_attempts(user_id, attempted_at DESC);
+
+    -- #308: SAML 2.0 SSO columns on users table
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS saml_subject_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_entity_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_provider TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_saml_subject ON users(saml_subject_id, idp_entity_id)
+      WHERE saml_subject_id IS NOT NULL;
+
+    -- #322: privacy policy versioning
+    CREATE TABLE IF NOT EXISTS privacy_policy_versions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      version_id TEXT UNIQUE NOT NULL,
+      effective_date DATE NOT NULL,
+      policy_text TEXT,
+      s3_key TEXT,
+      change_summary TEXT NOT NULL,
+      requires_reacceptance BOOLEAN NOT NULL DEFAULT FALSE,
+      published_by UUID REFERENCES users(id),
+      published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS privacy_policy_acceptances (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      policy_version_id TEXT NOT NULL REFERENCES privacy_policy_versions(version_id),
+      accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ip_address TEXT,
+      acceptance_channel TEXT NOT NULL DEFAULT 'signup'
+        CHECK (acceptance_channel IN ('signup', 'in_app', 'api')),
+      UNIQUE (user_id, policy_version_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_privacy_acceptances_user ON privacy_policy_acceptances(user_id, accepted_at DESC);
+
+    -- Track whether re-acceptance is outstanding (cleared when user accepts latest)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_reacceptance_required BOOLEAN NOT NULL DEFAULT FALSE;
+
+    -- #317: electronic bond signatures (DocuSign)
+    CREATE TABLE IF NOT EXISTS bond_signatures (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      bond_record_id UUID NOT NULL REFERENCES bond_records(id) ON DELETE CASCADE,
+      envelope_id TEXT UNIQUE NOT NULL,
+      signing_url TEXT,
+      status TEXT NOT NULL DEFAULT 'sent'
+        CHECK (status IN ('sent', 'delivered', 'completed', 'declined', 'voided')),
+      signed_document_hash TEXT,
+      completed_at TIMESTAMPTZ,
+      pdf_s3_key TEXT,
+      last_reminder_sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bond_signatures_bond ON bond_signatures(bond_record_id);
+    CREATE INDEX IF NOT EXISTS idx_bond_signatures_status ON bond_signatures(status, created_at DESC);
+
+    -- Track bond signature status on bond_records for fast lookup
+    ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS signature_status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (signature_status IN ('pending', 'sent', 'completed'));
   `,
     undefined,
     "migrate_schema",

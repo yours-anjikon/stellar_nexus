@@ -18,4 +18,6 @@ pub enum Error {
     StaleOracleError = 12,
     RateLimitExceededError = 13,
     OracleCallFailed = 14,
+    // #339 — oracle role is separate from general admin; caller used wrong role
+    UnauthorizedRole = 15,
 }

@@ -32,6 +32,8 @@ pub enum DataKey {
     ProposalCounter,
     PriceOracle,
     Version,
+    // #339 — dedicated oracle role; can set_required_collateral but not upgrade/register
+    OracleAdmin,
 }
 
 #[contracttype]
@@ -56,16 +58,25 @@ pub struct Account {
 
 #[contractimpl]
 impl TariffShieldContract {
-    pub fn initialize(env: Env, admins: Vec<Address>, surety: Address, token: Address) {
+    /// #339 — `oracle_admin` is required auth; set to same as admins[0] if not separate.
+    pub fn initialize(
+        env: Env,
+        admins: Vec<Address>,
+        surety: Address,
+        token: Address,
+        oracle_admin: Address,
+    ) {
         if env.storage().instance().has(&DataKey::Admins) {
             panic_with_error!(&env, Error::AlreadyInitialized);
         }
         for admin in admins.iter() {
             admin.require_auth();
         }
+        oracle_admin.require_auth();
         env.storage().instance().set(&DataKey::Admins, &admins);
         env.storage().instance().set(&DataKey::Surety, &surety);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage().instance().set(&DataKey::OracleAdmin, &oracle_admin);
         env.storage().instance().set(&DataKey::ProposalCounter, &0u64);
     }
 
@@ -146,8 +157,9 @@ impl TariffShieldContract {
         price_oracle_contract: Option<Address>,
         bypass_rate_limit: bool,
     ) {
-        let admin = get_admin(&env);
-        admin.require_auth();
+        // #339 — only the oracle admin may call this; general admin cannot
+        let oracle_admin = get_oracle_admin(&env);
+        oracle_admin.require_auth();
         if new_required < 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
@@ -367,6 +379,23 @@ impl TariffShieldContract {
         get_token(&env)
     }
 
+    // #339 — view the current oracle admin address
+    pub fn get_oracle_admin(env: Env) -> Address {
+        get_oracle_admin(&env)
+    }
+
+    // #339 — general admin can rotate the oracle admin key (e.g. after compromise)
+    pub fn rotate_oracle_admin(env: Env, caller: Address, new_oracle_admin: Address) {
+        require_admin(&env, &caller);
+        caller.require_auth();
+        new_oracle_admin.require_auth();
+        env.storage().instance().set(&DataKey::OracleAdmin, &new_oracle_admin);
+        env.events().publish(
+            (symbol_short!("oraclrot"), new_oracle_admin.clone()),
+            (),
+        );
+    }
+
     pub fn migrate_account(env: Env, admin: Address, importer: Address, new_account: Account) {
         require_admin(&env, &admin);
         admin.require_auth();
@@ -470,6 +499,13 @@ fn require_fresh_collateral(env: &Env, importer: &Address, acct: &Account) {
         env.events().publish((symbol_short!("stale"), importer.clone()), expiry);
         panic_with_error!(env, Error::StaleOracleError);
     }
+}
+
+fn get_oracle_admin(env: &Env) -> Address {
+    env.storage()
+        .instance()
+        .get(&DataKey::OracleAdmin)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
 
 fn get_price_oracle_optional(env: &Env) -> Option<Address> {

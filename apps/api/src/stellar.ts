@@ -7,8 +7,13 @@ import { createRpcServer } from "./lib/soroban/rpcClient.js";
 
 const tracer = trace.getTracer("tariffshield-stellar");
 
+// #339 — general admin (registration, withdrawals, upgrades)
 export const platformKeypair = Keypair.fromSecret(env.PLATFORM_STELLAR_SECRET);
 export const suretyKeypair = Keypair.fromSecret(env.SURETY_STELLAR_SECRET);
+// #339 — oracle-only role (set_required_collateral); falls back to platformKeypair in dev
+export const oracleKeypair = env.ORACLE_STELLAR_SECRET
+  ? Keypair.fromSecret(env.ORACLE_STELLAR_SECRET)
+  : platformKeypair;
 
 export const sorobanRpcCallsTotal = new client.Counter({
   name: "soroban_rpc_calls_total",

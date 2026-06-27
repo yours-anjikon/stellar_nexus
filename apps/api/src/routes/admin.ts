@@ -1,9 +1,12 @@
 import { Router, type Request, type Response } from "express";
+import { z } from "zod";
 import { pool } from "../db.js";
-import { authMiddleware, type AuthedRequest } from "../auth.js";
+import { authMiddleware, requireRole, privacyReacceptanceGate, type AuthedRequest } from "../auth.js";
+import { platformKeypair, oracleKeypair } from "../stellar.js";
 
 export const adminRouter = Router();
 adminRouter.use(authMiddleware);
+adminRouter.use(privacyReacceptanceGate);
 
 adminRouter.get("/oracle-alerts", async (req: Request, res: Response) => {
   const user = (req as AuthedRequest).user;
@@ -51,3 +54,52 @@ adminRouter.patch("/oracle-alerts/:id/acknowledge", async (req: Request, res: Re
 
   res.json({ alert: r.rows[0] });
 });
+
+// #339 — GET /admin/roles — operational visibility into current role addresses
+adminRouter.get("/roles", requireRole("surety_admin"), (_req: Request, res: Response) => {
+  res.json({
+    generalAdmin: platformKeypair.publicKey(),
+    oracleAdmin: oracleKeypair.publicKey(),
+    rolesAreDistinct: platformKeypair.publicKey() !== oracleKeypair.publicKey(),
+  });
+});
+
+// #322 — POST /admin/privacy-policy/publish — publish a new privacy policy version
+adminRouter.post(
+  "/privacy-policy/publish",
+  requireRole("surety_admin"),
+  async (req: Request, res: Response) => {
+    const user = (req as AuthedRequest).user;
+    const parse = z.object({
+      versionId: z.string().min(1),
+      effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      changeSummary: z.string().min(10),
+      policyText: z.string().optional(),
+      requiresReacceptance: z.boolean().default(false),
+    }).safeParse(req.body);
+
+    if (!parse.success) {
+      res.status(400).json({ error: "invalid input", details: parse.error.issues });
+      return;
+    }
+    const { versionId, effectiveDate, changeSummary, policyText, requiresReacceptance } = parse.data;
+
+    const result = await pool.query(
+      `INSERT INTO privacy_policy_versions
+         (version_id, effective_date, policy_text, change_summary, requires_reacceptance, published_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, version_id, effective_date, requires_reacceptance, published_at`,
+      [versionId, effectiveDate, policyText ?? null, changeSummary, requiresReacceptance, user.id],
+    );
+
+    if (requiresReacceptance) {
+      // Flag all active users so their next request returns 403 with reason
+      await pool.query(
+        `UPDATE users SET privacy_reacceptance_required = TRUE
+         WHERE role IN ('importer', 'surety_admin')`,
+      );
+    }
+
+    res.status(201).json({ version: result.rows[0] });
+  },
+);
