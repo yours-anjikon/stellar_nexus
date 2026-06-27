@@ -205,7 +205,10 @@ const MAX_DESCRIPTION_LENGTH: u32 = 1_000;
 /// #154 — Maximum length for pool outcome labels in bytes.
 const MAX_OUTCOME_LENGTH: u32 = 50;
 const MIN_OUTCOME_COUNT: u32 = 2;
-const MAX_OUTCOME_COUNT: u32 = 10;
+/// #634 — Hard upper bound on outcomes per pool. Prevents gas exhaustion from
+/// unbounded storage writes and iteration in place_bet / settlement paths.
+/// Raising this requires auditing all loops that iterate over outcomes.
+const MAX_OUTCOME_COUNT: u32 = 20;
 const MAX_METADATA_URI_LENGTH: u32 = 256;
 const MAX_SCHEDULE_POOL_HORIZON_SECS: u64 = 30 * 24 * 60 * 60;
 const SCHEDULED_CLAIM_EXECUTION_CAP: u32 = 10;
@@ -303,6 +306,8 @@ pub enum ContractError {
     InvalidWebhookUrl = 53,
     /// #396 — No webhook found matching the given URL.
     WebhookNotFound = 54,
+    /// #634 — Pool creation rejected because the number of outcomes exceeds MAX_OUTCOME_COUNT.
+    TooManyOutcomes = 55,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -1480,7 +1485,11 @@ impl PredinexContract {
 
     fn validate_outcomes(env: &Env, outcomes: &Vec<String>) -> Result<(), ContractError> {
         if outcomes.len() < MIN_OUTCOME_COUNT || outcomes.len() > MAX_OUTCOME_COUNT {
-            return Err(ContractError::InvalidOutcome);
+            return Err(if outcomes.len() > MAX_OUTCOME_COUNT {
+                ContractError::TooManyOutcomes
+            } else {
+                ContractError::InvalidOutcome
+            });
         }
 
         for i in 0..outcomes.len() {
@@ -1712,6 +1721,12 @@ impl PredinexContract {
         )?;
         if description.len() > MAX_DESCRIPTION_LENGTH {
             return Err(ContractError::DescriptionTooLong);
+        }
+
+        // #634 — Fast-fail before validate_outcomes to surface a clear error
+        // (TooManyOutcomes) and avoid allocating/iterating over a huge vec.
+        if outcomes.len() > MAX_OUTCOME_COUNT {
+            return Err(ContractError::TooManyOutcomes);
         }
 
         Self::validate_outcomes(env, &outcomes)?;
