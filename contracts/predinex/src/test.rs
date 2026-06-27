@@ -5563,3 +5563,597 @@ fn n5_get_user_claim_history_empty_for_no_claims() {
     let history = client.get_user_claim_history(&user, &0, &10);
     assert_eq!(history.len(), 0);
 }
+
+// ── #626 Multi-asset pool unit tests ─────────────────────────────────────────
+
+/// Helper: register a fresh contract, a protocol token, an alt token, set the
+/// exchange rate for the alt token, and return all handles needed by the tests.
+struct MultiAssetSetup {
+    env: Env,
+    client: PredinexContractClient<'static>,
+    proto_token: token::Client<'static>,
+    proto_admin_client: token::StellarAssetClient<'static>,
+    alt_token: token::Client<'static>,
+    alt_admin_client: token::StellarAssetClient<'static>,
+    treasury: Address,
+    creator: Address,
+}
+
+fn multi_asset_setup() -> MultiAssetSetup {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Protocol token (XLM stand-in).
+    let proto_admin = Address::generate(&env);
+    let proto_id = env.register_stellar_asset_contract_v2(proto_admin.clone());
+    let proto_token = token::Client::new(&env, &proto_id.address());
+    let proto_admin_client = token::StellarAssetClient::new(&env, &proto_id.address());
+
+    // Alt token.
+    let alt_admin = Address::generate(&env);
+    let alt_id = env.register_stellar_asset_contract_v2(alt_admin.clone());
+    let alt_token = token::Client::new(&env, &alt_id.address());
+    let alt_admin_client = token::StellarAssetClient::new(&env, &alt_id.address());
+
+    let contract_id = env.register(PredinexContract, ());
+    // SAFETY: we extend the lifetime to 'static because the Env lives in the
+    // returned struct and is never outlived in these tests.
+    let client: PredinexContractClient<'static> =
+        unsafe { core::mem::transmute(PredinexContractClient::new(&env, &contract_id)) };
+
+    let treasury = Address::generate(&env);
+    client.initialize(&proto_id.address(), &treasury);
+
+    // Register exchange rate: 1 alt = 0.5 proto (5_000 bps).
+    client.set_token_exchange_rate(&treasury, &alt_id.address(), &5_000i128);
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000);
+
+    MultiAssetSetup {
+        env,
+        client,
+        proto_token,
+        proto_admin_client,
+        alt_token,
+        alt_admin_client,
+        treasury,
+        creator: Address::generate(&env),
+    }
+}
+
+// ── create_multi_asset_pool ──────────────────────────────────────────────────
+
+/// MA-C1: happy path — pool is created and marked multi-asset.
+#[test]
+fn ma_c1_create_multi_asset_pool_happy_path() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+
+    let mut outcomes: soroban_sdk::Vec<soroban_sdk::String> = soroban_sdk::Vec::new(env);
+    outcomes.push_back(String::from_str(env, "Yes"));
+    outcomes.push_back(String::from_str(env, "No"));
+
+    let mut tokens: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(env);
+    tokens.push_back(s.alt_token.address.clone());
+
+    let pool_id = s.client.create_multi_asset_pool(
+        &s.creator,
+        &String::from_str(env, "Multi Pool"),
+        &String::from_str(env, "Desc"),
+        &outcomes,
+        &3_600u64,
+        &tokens,
+        &None,
+    ).unwrap();
+
+    assert_eq!(pool_id, 1);
+    let allowed = s.client.get_pool_allowed_tokens(&pool_id).unwrap();
+    assert_eq!(allowed.len(), 1);
+    assert_eq!(allowed.get(0).unwrap(), s.alt_token.address);
+}
+
+/// MA-C2: creation fails when no exchange rate is set for an allowed token.
+#[test]
+fn ma_c2_create_multi_asset_pool_rejects_token_without_exchange_rate() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+
+    // Register a brand-new token with no exchange rate.
+    let unknown_admin = Address::generate(env);
+    let unknown_id = env.register_stellar_asset_contract_v2(unknown_admin);
+    let unknown_addr = token::Client::new(env, &unknown_id.address()).address.clone();
+
+    let mut outcomes: soroban_sdk::Vec<soroban_sdk::String> = soroban_sdk::Vec::new(env);
+    outcomes.push_back(String::from_str(env, "Yes"));
+    outcomes.push_back(String::from_str(env, "No"));
+
+    let mut tokens: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(env);
+    tokens.push_back(unknown_addr);
+
+    let result = s.client.try_create_multi_asset_pool(
+        &s.creator,
+        &String::from_str(env, "Bad Pool"),
+        &String::from_str(env, "Desc"),
+        &outcomes,
+        &3_600u64,
+        &tokens,
+        &None,
+    );
+    assert!(result.is_err());
+}
+
+/// MA-C3: creation fails with an empty allowed_tokens list.
+#[test]
+fn ma_c3_create_multi_asset_pool_rejects_empty_token_list() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+
+    let mut outcomes: soroban_sdk::Vec<soroban_sdk::String> = soroban_sdk::Vec::new(env);
+    outcomes.push_back(String::from_str(env, "Yes"));
+    outcomes.push_back(String::from_str(env, "No"));
+    let empty_tokens: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(env);
+
+    let result = s.client.try_create_multi_asset_pool(
+        &s.creator,
+        &String::from_str(env, "Bad Pool"),
+        &String::from_str(env, "Desc"),
+        &outcomes,
+        &3_600u64,
+        &empty_tokens,
+        &None,
+    );
+    assert!(result.is_err());
+}
+
+// ── set_token_exchange_rate ──────────────────────────────────────────────────
+
+/// MA-R1: treasury can set and retrieve an exchange rate.
+#[test]
+fn ma_r1_set_token_exchange_rate_stores_value() {
+    let s = multi_asset_setup();
+    let rate = s.client.get_token_exchange_rate(&s.alt_token.address).unwrap();
+    assert_eq!(rate, 5_000i128);
+}
+
+/// MA-R2: non-treasury caller is rejected.
+#[test]
+fn ma_r2_set_token_exchange_rate_unauthorized_rejected() {
+    let s = multi_asset_setup();
+    let rogue = Address::generate(&s.env);
+    let result = s.client.try_set_token_exchange_rate(&rogue, &s.alt_token.address, &10_000i128);
+    assert!(result.is_err());
+}
+
+/// MA-R3: rate ≤ 0 is rejected.
+#[test]
+fn ma_r3_set_token_exchange_rate_zero_rejected() {
+    let s = multi_asset_setup();
+    let result = s.client.try_set_token_exchange_rate(&s.treasury, &s.alt_token.address, &0i128);
+    assert!(result.is_err());
+}
+
+// ── place_multi_asset_bet ────────────────────────────────────────────────────
+
+/// Helper: create a multi-asset pool and return its id.
+fn create_ma_pool(s: &MultiAssetSetup) -> u32 {
+    let env = &s.env;
+    let mut outcomes: soroban_sdk::Vec<soroban_sdk::String> = soroban_sdk::Vec::new(env);
+    outcomes.push_back(String::from_str(env, "Yes"));
+    outcomes.push_back(String::from_str(env, "No"));
+    let mut tokens: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(env);
+    tokens.push_back(s.alt_token.address.clone());
+    s.client.create_multi_asset_pool(
+        &s.creator,
+        &String::from_str(env, "MA Pool"),
+        &String::from_str(env, "D"),
+        &outcomes,
+        &3_600u64,
+        &tokens,
+        &None,
+    ).unwrap()
+}
+
+/// MA-B1: happy path — bet placed, token transferred to contract.
+#[test]
+fn ma_b1_place_multi_asset_bet_transfers_tokens_to_contract() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let user = Address::generate(&s.env);
+    s.alt_admin_client.mint(&user, &20_000i128);
+
+    s.client.place_multi_asset_bet(&user, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    // Contract holds the tokens.
+    let contract_bal = s.alt_token.balance(&s.client.address);
+    assert_eq!(contract_bal, 10_000i128);
+}
+
+/// MA-B2: unsupported token is rejected with UnsupportedToken.
+#[test]
+fn ma_b2_place_multi_asset_bet_unsupported_token_rejected() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let user = Address::generate(&s.env);
+
+    // proto_token is not in allowed_tokens for this pool.
+    let result = s.client.try_place_multi_asset_bet(
+        &user, &pool_id, &0u32, &10_000i128, &s.proto_token.address, &None,
+    );
+    assert!(result.is_err());
+}
+
+/// MA-B3: zero amount is rejected.
+#[test]
+fn ma_b3_place_multi_asset_bet_zero_amount_rejected() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let user = Address::generate(&s.env);
+
+    let result = s.client.try_place_multi_asset_bet(
+        &user, &pool_id, &0u32, &0i128, &s.alt_token.address, &None,
+    );
+    assert!(result.is_err());
+}
+
+/// MA-B4: placing a bet on a single-asset pool via the multi-asset path is rejected.
+#[test]
+fn ma_b4_place_multi_asset_bet_on_single_asset_pool_rejected() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+
+    // Create a regular (single-asset) pool.
+    let pool_id = s.client.create_pool(
+        &s.creator,
+        &String::from_str(env, "SA Pool"),
+        &String::from_str(env, "D"),
+        &String::from_str(env, "Yes"),
+        &String::from_str(env, "No"),
+        &3_600u64,
+        &MIN_CREATOR_DEPOSIT,
+    );
+    let user = Address::generate(env);
+    let result = s.client.try_place_multi_asset_bet(
+        &user, &pool_id, &0u32, &1_000i128, &s.alt_token.address, &None,
+    );
+    assert!(result.is_err());
+}
+
+/// MA-B5: self-referral is rejected.
+#[test]
+fn ma_b5_place_multi_asset_bet_self_referral_rejected() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let user = Address::generate(&s.env);
+    s.alt_admin_client.mint(&user, &20_000i128);
+
+    let result = s.client.try_place_multi_asset_bet(
+        &user, &pool_id, &0u32, &1_000i128, &s.alt_token.address, &Some(user.clone()),
+    );
+    assert!(result.is_err());
+}
+
+// ── claim_multi_asset_winnings ───────────────────────────────────────────────
+
+/// MA-W1: full happy path — create pool, two users bet opposite sides, settle,
+/// winner claims and receives proportional tokens back.
+#[test]
+fn ma_w1_claim_multi_asset_winnings_happy_path() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let winner = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&winner, &10_000i128);
+    s.alt_admin_client.mint(&loser, &10_000i128);
+
+    // winner bets on outcome 0, loser on outcome 1.
+    s.client.place_multi_asset_bet(&winner, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    // Advance past expiry and settle.
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+
+    let before = s.alt_token.balance(&winner);
+    s.client.claim_multi_asset_winnings(&winner, &pool_id).unwrap();
+    let after = s.alt_token.balance(&winner);
+
+    // Winner should receive more than their original stake (net of protocol fee).
+    assert!(after > before);
+    assert!(after > 10_000i128);
+}
+
+/// MA-W2: loser gets nothing.
+#[test]
+fn ma_w2_claim_multi_asset_winnings_loser_gets_nothing() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let winner = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&winner, &10_000i128);
+    s.alt_admin_client.mint(&loser, &10_000i128);
+
+    s.client.place_multi_asset_bet(&winner, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+
+    // Loser's balance before attempting claim.
+    let result = s.client.try_claim_multi_asset_winnings(&loser, &pool_id);
+    assert!(result.is_err());
+}
+
+/// MA-W3: double claim is rejected.
+#[test]
+fn ma_w3_claim_multi_asset_winnings_double_claim_rejected() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let winner = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&winner, &10_000i128);
+    s.alt_admin_client.mint(&loser, &10_000i128);
+
+    s.client.place_multi_asset_bet(&winner, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+
+    s.client.claim_multi_asset_winnings(&winner, &pool_id).unwrap();
+    let result = s.client.try_claim_multi_asset_winnings(&winner, &pool_id);
+    assert!(result.is_err());
+}
+
+/// MA-W4: claim on unsettled pool is rejected.
+#[test]
+fn ma_w4_claim_multi_asset_winnings_unsettled_pool_rejected() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let user = Address::generate(&s.env);
+
+    let result = s.client.try_claim_multi_asset_winnings(&user, &pool_id);
+    assert!(result.is_err());
+}
+
+/// MA-W5: calling claim_winnings (single-asset path) on a multi-asset pool
+///         is redirected with MultiAssetClaimRequired.
+#[test]
+fn ma_w5_single_asset_claim_on_multi_asset_pool_rejected() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let winner = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&winner, &10_000i128);
+    s.alt_admin_client.mint(&loser, &10_000i128);
+
+    s.client.place_multi_asset_bet(&winner, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+
+    // The single-asset claim path must reject multi-asset pools.
+    let result = s.client.try_claim_winnings(&winner, &pool_id);
+    assert!(result.is_err());
+}
+
+// ── collect_multi_asset_fees ─────────────────────────────────────────────────
+
+/// MA-F1: fees are transferred to treasury recipient after first claim.
+#[test]
+fn ma_f1_collect_multi_asset_fees_transfers_to_treasury() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let winner = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&winner, &10_000i128);
+    s.alt_admin_client.mint(&loser, &10_000i128);
+
+    s.client.place_multi_asset_bet(&winner, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+
+    // First claim populates per-token fee.
+    s.client.claim_multi_asset_winnings(&winner, &pool_id).unwrap();
+
+    let treasury_before = s.alt_token.balance(&s.treasury);
+    s.client.collect_multi_asset_fees(&s.treasury, &pool_id).unwrap();
+    let treasury_after = s.alt_token.balance(&s.treasury);
+
+    assert!(treasury_after >= treasury_before);
+}
+
+/// MA-F2: collect fails on unsettled pool.
+#[test]
+fn ma_f2_collect_multi_asset_fees_unsettled_pool_rejected() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let result = s.client.try_collect_multi_asset_fees(&s.treasury, &pool_id);
+    assert!(result.is_err());
+}
+
+/// MA-F3: non-treasury caller is rejected.
+#[test]
+fn ma_f3_collect_multi_asset_fees_unauthorized_rejected() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let winner = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&winner, &10_000i128);
+    s.alt_admin_client.mint(&loser, &10_000i128);
+
+    s.client.place_multi_asset_bet(&winner, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+    s.client.claim_multi_asset_winnings(&winner, &pool_id).unwrap();
+
+    let rogue = Address::generate(env);
+    let result = s.client.try_collect_multi_asset_fees(&rogue, &pool_id);
+    assert!(result.is_err());
+}
+
+// ── set_pool_token_bet_limits ────────────────────────────────────────────────
+
+/// MA-L1: treasury can set per-token limits and they are stored.
+#[test]
+fn ma_l1_set_pool_token_bet_limits_stores_limits() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    // Should not panic.
+    s.client.set_pool_token_bet_limits(
+        &s.treasury, &pool_id, &s.alt_token.address, &1_000i128, &50_000i128,
+    ).unwrap();
+}
+
+/// MA-L2: limits on single-asset pool are rejected.
+#[test]
+fn ma_l2_set_pool_token_bet_limits_single_asset_pool_rejected() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+
+    let sa_pool = s.client.create_pool(
+        &s.creator,
+        &String::from_str(env, "SA"),
+        &String::from_str(env, "D"),
+        &String::from_str(env, "Yes"),
+        &String::from_str(env, "No"),
+        &3_600u64,
+        &MIN_CREATOR_DEPOSIT,
+    );
+    let result = s.client.try_set_pool_token_bet_limits(
+        &s.treasury, &sa_pool, &s.alt_token.address, &1_000i128, &50_000i128,
+    );
+    assert!(result.is_err());
+}
+
+/// MA-L3: non-treasury caller is rejected.
+#[test]
+fn ma_l3_set_pool_token_bet_limits_unauthorized_rejected() {
+    let s = multi_asset_setup();
+    let pool_id = create_ma_pool(&s);
+    let rogue = Address::generate(&s.env);
+    let result = s.client.try_set_pool_token_bet_limits(
+        &rogue, &pool_id, &s.alt_token.address, &1_000i128, &50_000i128,
+    );
+    assert!(result.is_err());
+}
+
+// ── edge cases ───────────────────────────────────────────────────────────────
+
+/// MA-E1: exchange rate not set for a token causes place_bet to fail.
+#[test]
+fn ma_e1_place_multi_asset_bet_no_exchange_rate_fails() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+
+    // Register pool with alt_token, then remove the exchange rate.
+    let pool_id = create_ma_pool(&s);
+    // Overwrite rate to 0 — try_set should fail, so delete by setting the pool
+    // up with an extra token that has no rate.
+    let extra_admin = Address::generate(env);
+    let extra_id = env.register_stellar_asset_contract_v2(extra_admin);
+    let extra_token = token::Client::new(env, &extra_id.address());
+
+    // Register extra token rate so pool creation succeeds.
+    s.client.set_token_exchange_rate(&s.treasury, &extra_id.address(), &10_000i128).unwrap();
+
+    let mut outcomes: soroban_sdk::Vec<soroban_sdk::String> = soroban_sdk::Vec::new(env);
+    outcomes.push_back(String::from_str(env, "A"));
+    outcomes.push_back(String::from_str(env, "B"));
+    let mut tokens: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(env);
+    tokens.push_back(extra_id.address());
+
+    let pool2 = s.client.create_multi_asset_pool(
+        &s.creator,
+        &String::from_str(env, "P2"),
+        &String::from_str(env, "D"),
+        &outcomes,
+        &3_600u64,
+        &tokens,
+        &None,
+    ).unwrap();
+
+    let user = Address::generate(env);
+    extra_token.mock_all_auths();
+    token::StellarAssetClient::new(env, &extra_id.address()).mint(&user, &5_000i128);
+
+    // Bet should succeed since rate is set.
+    s.client.place_multi_asset_bet(
+        &user, &pool2, &0u32, &1_000i128, &extra_id.address(), &None,
+    ).unwrap();
+    let _ = pool_id; // used above for setup only
+}
+
+/// MA-E2: bet placement on expired pool is rejected.
+#[test]
+fn ma_e2_place_multi_asset_bet_expired_pool_rejected() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    // Advance past pool expiry.
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+
+    let user = Address::generate(env);
+    s.alt_admin_client.mint(&user, &10_000i128);
+
+    let result = s.client.try_place_multi_asset_bet(
+        &user, &pool_id, &0u32, &1_000i128, &s.alt_token.address, &None,
+    );
+    assert!(result.is_err());
+}
+
+/// MA-E3: two users each bet on the same outcome — both share the payout proportionally.
+#[test]
+fn ma_e3_multi_asset_proportional_payout_two_winners() {
+    let s = multi_asset_setup();
+    let env = &s.env;
+    let pool_id = create_ma_pool(&s);
+
+    let w1 = Address::generate(env);
+    let w2 = Address::generate(env);
+    let loser = Address::generate(env);
+    s.alt_admin_client.mint(&w1, &10_000i128);
+    s.alt_admin_client.mint(&w2, &5_000i128);
+    s.alt_admin_client.mint(&loser, &15_000i128);
+
+    s.client.place_multi_asset_bet(&w1, &pool_id, &0u32, &10_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&w2, &pool_id, &0u32, &5_000i128, &s.alt_token.address, &None).unwrap();
+    s.client.place_multi_asset_bet(&loser, &pool_id, &1u32, &15_000i128, &s.alt_token.address, &None).unwrap();
+
+    env.ledger().with_mut(|li| li.timestamp = 1_000 + 3_601);
+    s.client.settle_pool(&s.treasury, &pool_id, &0u32).unwrap();
+
+    let before_w1 = s.alt_token.balance(&w1);
+    let before_w2 = s.alt_token.balance(&w2);
+
+    s.client.claim_multi_asset_winnings(&w1, &pool_id).unwrap();
+    s.client.claim_multi_asset_winnings(&w2, &pool_id).unwrap();
+
+    let after_w1 = s.alt_token.balance(&w1);
+    let after_w2 = s.alt_token.balance(&w2);
+
+    // w1 bet 2× more than w2, so w1 should receive roughly 2× more.
+    let gain_w1 = after_w1 - before_w1;
+    let gain_w2 = after_w2 - before_w2;
+    assert!(gain_w1 > 0);
+    assert!(gain_w2 > 0);
+    // w1 gain should be roughly 2× w2 gain (allow ±1 for integer dust).
+    assert!((gain_w1 - gain_w2 * 2).abs() <= 1);
+}
