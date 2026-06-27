@@ -1,8 +1,8 @@
 #![cfg(test)]
 extern crate std;
-use std::format;
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+use std::format;
 
 // ── Deterministic pseudo-random number generator ─────────────────────────────
 struct Lcg(u64);

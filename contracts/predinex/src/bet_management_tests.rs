@@ -18,17 +18,21 @@ use soroban_sdk::{
 
 fn xdr_topic_val(env: &Env, event: &soroban_sdk::xdr::ContractEvent, i: usize) -> Val {
     match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(env, &v0.topics[i]).unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(env, &v0.topics[i])
+        .unwrap(),
     }
 }
 
 fn xdr_data_val(env: &Env, event: &soroban_sdk::xdr::ContractEvent) -> Val {
     match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(env, &v0.data).unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(env, &v0.data)
+        .unwrap(),
     }
 }
 
@@ -87,11 +91,15 @@ fn make_pool_bm(t: &BmEnv) -> (u32, Address) {
 fn last_bet_cancelled(env: &Env) -> (u32, Address, BetCancelledEvent) {
     let events = env.events().all();
     for event in events.events().iter().rev() {
-        let topic0: Symbol = soroban_sdk::TryFromVal::try_from_val(env, &xdr_topic_val(env, event, 0)).unwrap();
+        let topic0: Symbol =
+            soroban_sdk::TryFromVal::try_from_val(env, &xdr_topic_val(env, event, 0)).unwrap();
         if topic0 == Symbol::new(env, "bet_cancelled") {
-            let pool_id: u32 = soroban_sdk::TryFromVal::try_from_val(env, &xdr_topic_val(env, event, 2)).unwrap();
-            let user: Address = soroban_sdk::TryFromVal::try_from_val(env, &xdr_topic_val(env, event, 3)).unwrap();
-            let payload: BetCancelledEvent = soroban_sdk::TryFromVal::try_from_val(env, &xdr_data_val(env, event)).unwrap();
+            let pool_id: u32 =
+                soroban_sdk::TryFromVal::try_from_val(env, &xdr_topic_val(env, event, 2)).unwrap();
+            let user: Address =
+                soroban_sdk::TryFromVal::try_from_val(env, &xdr_topic_val(env, event, 3)).unwrap();
+            let payload: BetCancelledEvent =
+                soroban_sdk::TryFromVal::try_from_val(env, &xdr_data_val(env, event)).unwrap();
             return (pool_id, user, payload);
         }
     }
@@ -562,12 +570,15 @@ fn e8_duration_extended_event_payload() {
 
     let events = t.env.events().all();
     let last = events.events().last().expect("must emit an event");
-    let topic0: Symbol = soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, last, 0)).unwrap();
-    let topic_pool: u32 = soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, last, 2)).unwrap();
+    let topic0: Symbol =
+        soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, last, 0)).unwrap();
+    let topic_pool: u32 =
+        soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, last, 2)).unwrap();
     assert_eq!(topic0, Symbol::new(&t.env, "pool_duration_extended"));
     assert_eq!(topic_pool, pool_id);
 
-    let payload: PoolDurationExtendedEvent = soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_data_val(&t.env, last)).unwrap();
+    let payload: PoolDurationExtendedEvent =
+        soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_data_val(&t.env, last)).unwrap();
     assert_eq!(payload.creator, creator);
     assert_eq!(payload.new_expiry, new_expiry);
 }

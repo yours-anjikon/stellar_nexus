@@ -120,11 +120,14 @@ fn l3_losing_bettor_cannot_claim() {
     mint(&ctx, &loser, 200);
 
     let pool_id = make_pool(&ctx, &creator);
-    ctx.client.place_bet(&winner, &pool_id, &0, &200, &None::<Address>);
-    ctx.client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&winner, &pool_id, &0, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&loser, &pool_id, &1, &200, &None::<Address>);
 
     expire(&ctx);
-    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
+    ctx.client
+        .settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
 
     ctx.client.claim_winnings(&loser, &pool_id);
 }
@@ -143,12 +146,16 @@ fn l4_two_winners_proportional_payout() {
     mint(&ctx, &loser, 200);
 
     let pool_id = make_pool(&ctx, &creator);
-    ctx.client.place_bet(&w1, &pool_id, &0, &300, &None::<Address>); // 300 on A
-    ctx.client.place_bet(&w2, &pool_id, &0, &100, &None::<Address>); // 100 on A
-    ctx.client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>); // 200 on B
+    ctx.client
+        .place_bet(&w1, &pool_id, &0, &300, &None::<Address>); // 300 on A
+    ctx.client
+        .place_bet(&w2, &pool_id, &0, &100, &None::<Address>); // 100 on A
+    ctx.client
+        .place_bet(&loser, &pool_id, &1, &200, &None::<Address>); // 200 on B
 
     expire(&ctx);
-    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
+    ctx.client
+        .settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
 
     // Total pool = 600. Fee 2% = 12. Net = 588. Winners total = 400.
     // w1 share = 300 * 588 / 400 = 441
@@ -179,7 +186,8 @@ fn e1_bet_after_expiry_rejected() {
     let pool_id = make_pool(&ctx, &creator);
     expire(&ctx);
 
-    ctx.client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
+    ctx.client
+        .place_bet(&user, &pool_id, &0, &100, &None::<Address>);
 }
 
 /// E2: Claiming on an unsettled pool panics.
@@ -192,7 +200,8 @@ fn e2_claim_before_settlement_rejected() {
     mint(&ctx, &user, 100);
 
     let pool_id = make_pool(&ctx, &creator);
-    ctx.client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
+    ctx.client
+        .place_bet(&user, &pool_id, &0, &100, &None::<Address>);
 
     // Pool not settled yet
     ctx.client.claim_winnings(&user, &pool_id);
@@ -207,7 +216,8 @@ fn e3_settle_before_expiry_rejected() {
 
     let pool_id = make_pool(&ctx, &creator);
     // Timestamp is still 0, pool expires at 3600
-    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0);
+    ctx.client
+        .settle_pool(&ctx.client.get_admin(), &pool_id, &0);
 }
 
 /// E4: Minimum position — single token bet, single token LP deposit.
@@ -231,11 +241,14 @@ fn e5_maximum_positions_both_sides() {
     mint(&ctx, &side_b, big_amount);
 
     let pool_id = make_pool(&ctx, &creator);
-    ctx.client.place_bet(&side_a, &pool_id, &0, &big_amount, &None::<Address>);
-    ctx.client.place_bet(&side_b, &pool_id, &1, &big_amount, &None::<Address>);
+    ctx.client
+        .place_bet(&side_a, &pool_id, &0, &big_amount, &None::<Address>);
+    ctx.client
+        .place_bet(&side_b, &pool_id, &1, &big_amount, &None::<Address>);
 
     expire(&ctx);
-    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &1); // B wins
+    ctx.client
+        .settle_pool(&ctx.client.get_admin(), &pool_id, &1); // B wins
 
     // side_b is the sole winner: gets net pool = 2_000_000_000 - 2% = 1_960_000_000
     let winnings = ctx.client.claim_winnings(&side_b, &pool_id);
@@ -277,20 +290,19 @@ fn e9_dispute_after_window_rejected() {
     mint(&ctx, &user, 100);
 
     let pool_id = make_pool(&ctx, &creator);
-    ctx.client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
+    ctx.client
+        .place_bet(&user, &pool_id, &0, &100, &None::<Address>);
 
     expire(&ctx);
-    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0);
+    ctx.client
+        .settle_pool(&ctx.client.get_admin(), &pool_id, &0);
 
     // Advance ledger past dispute window (7 days + 1 second)
     ctx.env.ledger().with_mut(|l| {
         l.timestamp += 7 * 24 * 3600 + 1;
     });
 
-    ctx.client.dispute_pool(
-        &user,
-        &pool_id,
-    );
+    ctx.client.dispute_pool(&user, &pool_id);
 }
 
 /// E10: Unauthorized dispute resolution is rejected.
@@ -329,7 +341,10 @@ fn m2_get_pools_batch_lifecycle() {
 
     // Each entry in batch is Some(Pool)
     for i in 0..3u32 {
-        assert!(batch.get(i).unwrap().is_some(), "pool at index {i} must exist");
+        assert!(
+            batch.get(i).unwrap().is_some(),
+            "pool at index {i} must exist"
+        );
     }
 }
 
@@ -341,11 +356,8 @@ fn m9_rescue_tokens_rejects_non_admin() {
     let non_admin = Address::generate(&ctx.env);
     let to = Address::generate(&ctx.env);
 
-    let result = ctx.client.try_rescue_tokens(
-        &non_admin,
-        &ctx.token.address(),
-        &to,
-        &100i128,
-    );
+    let result = ctx
+        .client
+        .try_rescue_tokens(&non_admin, &ctx.token.address(), &to, &100i128);
     assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
 }
