@@ -2,7 +2,7 @@
 //! High-performance, tiered-fee pool contract for Soroban.
 //!
 //! Supports volume-based fee tiers, a fallback flat fee, and optional fee manager delegation.
-//! All operations are fully validated and emit structured events for off-chain indexing.
+//! All operations are fully validated and emit structured events for off-chain indexing
 
 use soroban_sdk::{
     contract, contractimpl, contracterror, contracttype, log, vec, Env, Address, Vec, Symbol,
