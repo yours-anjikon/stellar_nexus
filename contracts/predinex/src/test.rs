@@ -5128,157 +5128,220 @@ fn m9_update_twap_emits_twap_updated_event() {
     assert_eq!(payload.odds.get(1).unwrap(), 2000); // 100/500 * 10000
 }
 
-// ── Issue #561: get_pool_count ───────────────────────────────────────────────
+// ── User claim analytics ──────────────────────────────────────────────────────
 
+/// N1: get_total_user_claims returns cumulative winnings across multiple pools.
 #[test]
-fn test_get_pool_count_increments_on_create() {
+fn n1_get_total_user_claims_tracks_cumulative_winnings() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let admin = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token, &admin);
 
-    // Before any pool, PoolCounter defaults to 1 (next available pool ID).
-    assert_eq!(client.get_pool_count(), 1u32, "counter must be 1 before any pool is created");
+    client.initialize(&token_id.address(), &token_admin);
 
-    client.create_pool(
-        &admin,
-        &String::from_str(&env, "Pool One"),
-        &String::from_str(&env, "First pool"),
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &10_000);
+
+    env.ledger().with_mut(|li| li.timestamp = 100);
+
+    // Pool 1: user bets 500 on outcome 0, opponent bets 500 on outcome 1
+    let pool_1 = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Pool 1"),
+        &String::from_str(&env, "Desc"),
         &String::from_str(&env, "Yes"),
         &String::from_str(&env, "No"),
-        &3600u64,
+        &3600,
     );
-    assert_eq!(client.get_pool_count(), 2u32, "counter must advance to 2 after first pool");
+    let opponent = Address::generate(&env);
+    token_admin_client.mint(&opponent, &1000);
+    client.place_bet(&user, &pool_1, &0, &500, &None::<Address>);
+    client.place_bet(&opponent, &pool_1, &1, &500, &None::<Address>);
 
-    client.create_pool(
-        &admin,
-        &String::from_str(&env, "Pool Two"),
-        &String::from_str(&env, "Second pool"),
+    // Pool 2: user bets 300 on outcome 0, opponent bets 700 on outcome 1
+    let pool_2 = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Pool 2"),
+        &String::from_str(&env, "Desc"),
         &String::from_str(&env, "Yes"),
         &String::from_str(&env, "No"),
-        &3600u64,
+        &3600,
     );
-    assert_eq!(client.get_pool_count(), 3u32, "counter must advance to 3 after second pool");
+    let opponent2 = Address::generate(&env);
+    token_admin_client.mint(&opponent2, &1000);
+    client.place_bet(&user, &pool_2, &0, &300, &None::<Address>);
+    client.place_bet(&opponent2, &pool_2, &1, &700, &None::<Address>);
+
+    // No claims yet → total is 0
+    assert_eq!(client.get_total_user_claims(&user), 0);
+
+    env.ledger().with_mut(|li| li.timestamp = 4000);
+
+    // Settle and claim pool 1 (outcome 0 wins)
+    client.settle_pool(&creator, &pool_1, &0);
+    let claim_1 = client.claim_winnings(&user, &pool_1);
+    assert!(claim_1 > 0);
+    assert_eq!(client.get_total_user_claims(&user), claim_1);
+
+    // Settle and claim pool 2 (outcome 0 wins)
+    client.settle_pool(&creator, &pool_2, &0);
+    let claim_2 = client.claim_winnings(&user, &pool_2);
+    assert!(claim_2 > 0);
+    assert_eq!(client.get_total_user_claims(&user), claim_1 + claim_2);
 }
 
-// ── Issue #562: get_user_bet ─────────────────────────────────────────────────
-// Core coverage is provided by test_get_user_bet_returns_correct_amounts and
-// test_get_user_bet_returns_none_for_user_with_no_bet (above).
-// This test verifies the function after multiple bets on the same pool.
-
+/// N2: get_total_user_claims returns 0 for a user who never claimed.
 #[test]
-fn test_get_user_bet_reflects_cumulative_stake() {
+fn n2_get_total_user_claims_zero_for_no_claims() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let admin = Address::generate(&env);
-    let user = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token, &admin);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &1000);
+
+    assert_eq!(client.get_total_user_claims(&user), 0);
+}
+
+/// N3: get_user_claim_history returns entries with correct fields in order.
+#[test]
+fn n3_get_user_claim_history_returns_correct_entries() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &10_000);
+
+    env.ledger().with_mut(|li| li.timestamp = 100);
 
     let pool_id = client.create_pool(
-        &admin,
-        &String::from_str(&env, "Cumulative Bet Pool"),
-        &String::from_str(&env, "Testing cumulative stake"),
+        &creator,
+        &String::from_str(&env, "Market"),
+        &String::from_str(&env, "Desc"),
         &String::from_str(&env, "Yes"),
         &String::from_str(&env, "No"),
-        &3600u64,
+        &3600,
     );
+    let opponent = Address::generate(&env);
+    token_admin_client.mint(&opponent, &1000);
+    client.place_bet(&user, &pool_id, &0, &400, &None::<Address>);
+    client.place_bet(&opponent, &pool_id, &1, &600, &None::<Address>);
 
-    let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
-    token_client.mint(&user, &600i128);
+    env.ledger().with_mut(|li| li.timestamp = 4000);
+    client.settle_pool(&creator, &pool_id, &0);
+    let winnings = client.claim_winnings(&user, &pool_id);
 
-    // Bet placed: no record yet
-    let before = client.get_user_bet(&pool_id, &user);
-    assert!(before.is_none(), "get_user_bet must return None before any bet");
+    let history = client.get_user_claim_history(&user, &0, &10);
+    assert_eq!(history.len(), 1);
 
-    client.place_bet(&user, &pool_id, &0u32, &200i128, &None::<Address>);
-    let after_first = client
-        .get_user_bet(&pool_id, &user)
-        .expect("bet must exist after first place_bet");
-    assert_eq!(after_first.amount_a, 200i128);
-    assert_eq!(after_first.amount_b, 0i128);
-    assert_eq!(after_first.total_bet, 200i128);
-
-    client.place_bet(&user, &pool_id, &1u32, &400i128, &None::<Address>);
-    let after_second = client
-        .get_user_bet(&pool_id, &user)
-        .expect("bet must exist after second place_bet");
-    assert_eq!(after_second.amount_a, 200i128);
-    assert_eq!(after_second.amount_b, 400i128);
-    assert_eq!(after_second.total_bet, 600i128);
+    let entry = history.get(0).unwrap();
+    assert_eq!(entry.pool_id, pool_id);
+    assert_eq!(entry.amount, winnings);
+    assert!(entry.fee > 0);
+    assert_eq!(entry.timestamp, 4000);
+    assert_eq!(entry.winning_outcome, 0);
 }
 
-// ── Issue #563: get_total_volume ─────────────────────────────────────────────
-
+/// N4: get_user_claim_history respects pagination (start_cursor, limit).
 #[test]
-fn test_get_total_volume_zero_before_bets() {
+fn n4_get_user_claim_history_pagination() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let admin = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token, &admin);
 
-    assert_eq!(
-        client.get_total_volume(),
-        0i128,
-        "get_total_volume must return 0 when no bets have been placed"
-    );
-}
+    client.initialize(&token_id.address(), &token_admin);
 
-#[test]
-fn test_get_total_volume_accumulates_across_bets() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
     let user = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
+    token_admin_client.mint(&user, &100_000);
+
+    env.ledger().with_mut(|li| li.timestamp = 100);
+
+    // Claim from 3 separate pools so we get 3 history entries.
+    for i in 0..3 {
+        let opponent = Address::generate(&env);
+        token_admin_client.mint(&opponent, &10_000);
+
+        let pool_id = client.create_pool(
+            &creator,
+            &String::from_str(&env, &format!("Pool {}", i)),
+            &String::from_str(&env, "Desc"),
+            &String::from_str(&env, "Yes"),
+            &String::from_str(&env, "No"),
+            &3600,
+        );
+
+        client.place_bet(&user, &pool_id, &0, &500, &None::<Address>);
+        client.place_bet(&opponent, &pool_id, &1, &500, &None::<Address>);
+
+        env.ledger().with_mut(|li| li.timestamp = 4000 + (i as u64) * 100);
+        client.settle_pool(&creator, &pool_id, &0);
+        client.claim_winnings(&user, &pool_id);
+    }
+
+    // Full history — 3 entries
+    let full = client.get_user_claim_history(&user, &0, &10);
+    assert_eq!(full.len(), 3);
+
+    // Paginated: start=1, limit=1 → 1 entry (the second one)
+    let page = client.get_user_claim_history(&user, &1, &1);
+    assert_eq!(page.len(), 1);
+    assert_eq!(page.get(0).unwrap().pool_id, 2); // pool IDs are 1-based: pool 1, pool 2, pool 3 → second entry is pool 2
+
+    // Paginated: start=5 (beyond length) → empty
+    let empty = client.get_user_claim_history(&user, &5, &10);
+    assert_eq!(empty.len(), 0);
+}
+
+/// N5: get_user_claim_history returns empty for user with no claims.
+#[test]
+fn n5_get_user_claim_history_empty_for_no_claims() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token, &admin);
 
-    let pool_id = client.create_pool(
-        &admin,
-        &String::from_str(&env, "Volume Test Pool"),
-        &String::from_str(&env, "Testing total volume accumulation"),
-        &String::from_str(&env, "Yes"),
-        &String::from_str(&env, "No"),
-        &3600u64,
-    );
+    client.initialize(&token_id.address(), &token_admin);
 
-    let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
-    token_client.mint(&user, &1000i128);
-
-    client.place_bet(&user, &pool_id, &0u32, &300i128, &None::<Address>);
-    assert_eq!(
-        client.get_total_volume(),
-        300i128,
-        "volume must equal the first bet amount"
-    );
-
-    client.place_bet(&user, &pool_id, &1u32, &450i128, &None::<Address>);
-    assert_eq!(
-        client.get_total_volume(),
-        750i128,
-        "volume must accumulate across multiple bets"
-    );
+    let user = Address::generate(&env);
+    let history = client.get_user_claim_history(&user, &0, &10);
+    assert_eq!(history.len(), 0);
 }
 

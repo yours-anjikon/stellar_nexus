@@ -193,6 +193,10 @@ pub enum DataKey {
     ReferralBalance(Address),
     /// #420 — Total volume generated through referrals across all referrers.
     TotalReferralVolume,
+    /// Cumulative total winnings claimed by a user across all pools.
+    UserTotalClaimed(Address),
+    /// Claim history entries for a user (capped ring buffer).
+    UserClaimHistory(Address),
 }
 
 // #189 — TTL bump policy for persistent storage entries.
@@ -676,6 +680,25 @@ pub struct ClaimEvent {
     pub fee_amount: i128,
     pub winning_outcome: u32,
     pub total_pool_size: i128,
+}
+
+/// A single entry in a user's claim history for read-only analytics.
+///
+/// Fields
+/// ------
+/// - `pool_id`         – the pool from which winnings were claimed
+/// - `amount`          – tokens transferred to the claimant
+/// - `fee`             – protocol fee deducted from this claim
+/// - `timestamp`       – ledger timestamp at the time of claim
+/// - `winning_outcome` – which outcome was declared the winner
+#[derive(Clone)]
+#[contracttype]
+pub struct UserClaimEntry {
+    pub pool_id: u32,
+    pub amount: i128,
+    pub fee: i128,
+    pub timestamp: u64,
+    pub winning_outcome: u32,
 }
 
 /// #193 — Global contract configuration returned by `get_config`.
@@ -3644,6 +3667,7 @@ impl PredinexContract {
         token_client.transfer(&env.current_contract_address(), &user, &winnings);
 
         // Step 4: emit events in final committed state.
+        let analytics_user = user.clone();
         env.events().publish(
             (Symbol::new(env, "claim_winnings"), pool_id, user),
             ClaimEvent {
@@ -3653,6 +3677,37 @@ impl PredinexContract {
                 total_pool_size: total_pool_balance,
             },
         );
+
+        // Step 5: update user analytics.
+        let total_key = DataKey::UserTotalClaimed(analytics_user.clone());
+        let prev_total: i128 = env.storage().persistent().get(&total_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&total_key, &(prev_total + winnings));
+
+        let history_key = DataKey::UserClaimHistory(analytics_user.clone());
+        let mut history: Vec<UserClaimEntry> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or_else(|| Vec::new(env));
+        history.push_back(UserClaimEntry {
+            pool_id,
+            amount: winnings,
+            fee,
+            timestamp: env.ledger().timestamp(),
+            winning_outcome,
+        });
+        while history.len() > 50 {
+            history.remove(0);
+        }
+        env.storage().persistent().set(&history_key, &history);
+        env.storage()
+            .persistent()
+            .extend_ttl(&history_key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
+        env.storage()
+            .persistent()
+            .extend_ttl(&total_key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
 
         Ok(winnings)
     }
@@ -4028,6 +4083,57 @@ impl PredinexContract {
             settlement_protocol_fee,
             treasury_credited,
         }
+    }
+
+    /// Return the cumulative total winnings claimed by a user across all pools.
+    ///
+    /// This is incremented on every successful `claim_winnings`,
+    /// `claim_all_winnings`, `execute_scheduled_claims`, and
+    /// `claim_multi_asset_winnings` call.
+    pub fn get_total_user_claims(env: Env, user: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get::<_, i128>(&DataKey::UserTotalClaimed(user))
+            .unwrap_or(0)
+    }
+
+    /// Return a paginated slice of a user's claim history.
+    ///
+    /// Entries are ordered oldest-first (FIFO). The history is capped at the
+    /// 50 most recent claims per user; older entries are dropped automatically.
+    ///
+    /// # Arguments
+    /// * `user`         – the claimant address
+    /// * `start_cursor` – zero-based index to start from (for pagination)
+    /// * `limit`        – maximum entries to return (capped at 20)
+    pub fn get_user_claim_history(
+        env: Env,
+        user: Address,
+        start_cursor: u32,
+        limit: u32,
+    ) -> Vec<UserClaimEntry> {
+        let history: Vec<UserClaimEntry> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::UserClaimHistory(user))
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let effective_limit = if limit > 20 { 20 } else { limit };
+        let mut result = Vec::new(&env);
+        let len: u32 = history.len();
+        if start_cursor >= len {
+            return result;
+        }
+        let mut end = start_cursor + effective_limit;
+        if end > len {
+            end = len;
+        }
+        let mut i = start_cursor;
+        while i < end {
+            result.push_back(history.get(i).unwrap());
+            i += 1;
+        }
+        result
     }
 
     pub fn get_treasury_balance(env: Env) -> i128 {
@@ -6074,6 +6180,7 @@ impl PredinexContract {
             .persistent()
             .remove(&DataKey::UserOutcomeBets(pool_id, user.clone()));
 
+        let analytics_user = user.clone();
         env.events().publish(
             (
                 Symbol::new(&env, "claim_winnings"),
@@ -6083,6 +6190,36 @@ impl PredinexContract {
             ),
             total_norm_paid,
         );
+
+        let total_key = DataKey::UserTotalClaimed(analytics_user.clone());
+        let prev_total: i128 = env.storage().persistent().get(&total_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&total_key, &(prev_total + total_norm_paid));
+
+        let history_key = DataKey::UserClaimHistory(analytics_user.clone());
+        let mut history: Vec<UserClaimEntry> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or_else(|| Vec::new(&env));
+        history.push_back(UserClaimEntry {
+            pool_id,
+            amount: total_norm_paid,
+            fee: 0,
+            timestamp: env.ledger().timestamp(),
+            winning_outcome,
+        });
+        while history.len() > 50 {
+            history.remove(0);
+        }
+        env.storage().persistent().set(&history_key, &history);
+        env.storage()
+            .persistent()
+            .extend_ttl(&history_key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
+        env.storage()
+            .persistent()
+            .extend_ttl(&total_key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
 
         Ok(total_norm_paid)
     }
