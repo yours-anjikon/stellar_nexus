@@ -105,6 +105,7 @@ impl BenchCtx {
             &String::from_str(&self.env, "Yes"),
             &String::from_str(&self.env, "No"),
             &86400,
+            &MIN_CREATOR_DEPOSIT,
         )
     }
 }

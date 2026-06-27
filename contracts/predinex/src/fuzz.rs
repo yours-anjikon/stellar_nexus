@@ -182,6 +182,7 @@ fn fuzz_place_bet_target() {
         &String::from_str(&t.env, "A"),
         &String::from_str(&t.env, "B"),
         &86400,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     let user = Address::generate(&t.env);
@@ -241,8 +242,6 @@ fn fuzz_place_bet_target() {
                         ContractError::PoolNotOpen |
                         ContractError::PoolExpired |
                         ContractError::InvalidOutcome |
-                        ContractError::BetBelowMinBet |
-                        ContractError::BetAboveMaxBet |
                         ContractError::PoolTotalOverflow |
                         ContractError::UserBetOverflow |
                         ContractError::PoolSizeLimitExceeded |
@@ -273,6 +272,7 @@ fn fuzz_settle_pool_target() {
         &String::from_str(&t.env, "A"),
         &String::from_str(&t.env, "B"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     let scheduled_pool_id = t.client.schedule_pool(
@@ -304,6 +304,7 @@ fn fuzz_settle_pool_target() {
         &String::from_str(&t.env, "A"),
         &String::from_str(&t.env, "B"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
     let user_a = Address::generate(&t.env);
     let user_b = Address::generate(&t.env);

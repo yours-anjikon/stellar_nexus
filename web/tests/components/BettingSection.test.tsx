@@ -2,9 +2,9 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import BettingSection from '../../app/components/BettingSection';
-import * as WalletAdapterProvider from '../../app/components/WalletAdapterProvider';
-import * as StacksProvider from '../../app/components/StacksProvider';
+import BettingSection from '@/components/BettingSection';
+import * as WalletAdapterProvider from '@/components/WalletAdapterProvider';
+import * as StacksProvider from '@/components/StacksProvider';
 import * as NetworkMismatch from '../../lib/hooks/useNetworkMismatch';
 import * as TxStatusHook from '../../app/lib/hooks/useTxStatus';
 import { useToast } from '../../providers/ToastProvider';
@@ -14,12 +14,12 @@ import * as NetworkMismatch from '../../lib/hooks/useNetworkMismatch';
 import { toastMessages } from '../../lib/toast-messages';
 
 // Mock WalletAdapterProvider hook
-vi.mock('../../app/components/WalletAdapterProvider', () => ({
+vi.mock('@/components/WalletAdapterProvider', () => ({
   useWallet: vi.fn(),
   WalletAdapterProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('../../app/components/StacksProvider', () => ({
+vi.mock('@/components/StacksProvider', () => ({
   useStacks: vi.fn(),
   StacksProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));

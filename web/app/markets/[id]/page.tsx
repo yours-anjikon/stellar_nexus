@@ -1,18 +1,20 @@
 'use client';
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('page');
 
 import Link from "next/link";
-import Navbar from "../../components/Navbar";
-import BettingSection from "../../components/BettingSection";
+import Navbar from '@/components/Navbar';
+import BettingSection from '@/components/BettingSection';
 import ClaimWinningsButton from "../../../components/ClaimWinningsButton";
 import SettledPoolSummary from "../../components/SettledPoolSummary";
-import { useWallet } from "../../components/WalletAdapterProvider";
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { useEffect, useState, useCallback } from "react";
 import { useUserActivity } from "../../hooks/useUserActivity";
 import { predinexReadApi } from "../../lib/adapters/predinex-read-api";
 import type { Pool } from "../../lib/adapters/types";
 import { fetchCurrentBlockHeightLive } from "../../lib/market-utils";
 import { blocksToSeconds } from "../../lib/countdown-utils";
-import CountdownTimer from "../../components/CountdownTimer";
+import CountdownTimer from '@/components/CountdownTimer';
 import DisputeHistoryTimeline from "../../components/DisputeHistoryTimeline";
 import { useDisputeHistory } from "../../lib/hooks/useDisputeHistory";
 import PoolActivityTimeline from "../../components/PoolActivityTimeline";
@@ -52,7 +54,7 @@ export default function PoolDetails({ params }: { params: Promise<{ id: string }
                 setPool(data);
             } catch (e) {
                 setError(e instanceof Error ? e.message : 'Failed to load pool');
-                console.error(`Failed to load pool ${poolId}:`, e);
+                log.error(`Failed to load pool ${poolId}:`, e);
             } finally {
                 setIsLoading(false);
             }
@@ -106,7 +108,7 @@ export default function PoolDetails({ params }: { params: Promise<{ id: string }
             setError(null);
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to refresh pool data';
-            console.error("Failed to refresh pool data:", err);
+            log.error("Failed to refresh pool data:", err);
             // Don't overwrite existing pool data on refresh error
             setError(msg);
         } finally {
@@ -276,15 +278,25 @@ export default function PoolDetails({ params }: { params: Promise<{ id: string }
 
                     {/* Odds Display */}
                     <div className="mb-8">
-                        <p className="text-sm text-muted-foreground mb-2">Current Odds</p>
-                        <div className="flex h-4 rounded-full overflow-hidden">
+                        <p className="text-sm text-muted-foreground mb-2" id="odds-bar-label">Current Odds</p>
+                        <div
+                            className="flex h-4 rounded-full overflow-hidden"
+                            role="progressbar"
+                            aria-labelledby="odds-bar-label"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={Number(oddsA)}
+                            aria-valuetext={`${pool.outcomeA}: ${oddsA}%, ${pool.outcomeB}: ${oddsB}%`}
+                        >
                             <div
                                 className="bg-green-500 transition-all"
                                 style={{ width: `${oddsA}%` }}
+                                aria-hidden="true"
                             />
                             <div
                                 className="bg-red-500 transition-all"
                                 style={{ width: `${oddsB}%` }}
+                                aria-hidden="true"
                             />
                         </div>
                         <div className="flex justify-between mt-2 text-sm">

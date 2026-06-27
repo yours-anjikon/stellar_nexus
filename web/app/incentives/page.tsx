@@ -1,9 +1,9 @@
 'use client';
 
-import Navbar from "../components/Navbar";
-import AuthGuard from "../components/AuthGuard";
+import Navbar from '@/components/Navbar';
+import AuthGuard from '@/components/AuthGuard';
 import IncentivesDisplay from "../components/IncentivesDisplay";
-import { useWallet } from "../components/WalletAdapterProvider";
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { useWalletConnect } from "../lib/hooks/useWalletConnect";
 
 export default function IncentivesPage() {

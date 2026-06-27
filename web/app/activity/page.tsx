@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Navbar from '../components/Navbar';
-import AuthGuard from '../components/AuthGuard';
+import Navbar from '@/components/Navbar';
+import AuthGuard from '@/components/AuthGuard';
 import ActivityFeed from '../components/ActivityFeed';
 import ActivityExportButton from '../components/ActivityExportButton';
-import { useWallet } from '../components/WalletAdapterProvider';
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { useUserActivity } from '../hooks/useUserActivity';
 import { Activity, ChevronLeft, ChevronRight, Target, Trophy, TrendingUp } from 'lucide-react';
 

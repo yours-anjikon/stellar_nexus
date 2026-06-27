@@ -32,7 +32,7 @@ interface PoolActivityTimelineProps {
   maxInitialEvents?: number;
 }
 
-const EVENT_ICON: Record<PoolActivityEventType, React.ComponentType<any>> = {
+const EVENT_ICON: Record<PoolActivityEventType, React.ComponentType<{ className?: string }>> = {
   'pool-created': Plus,
   'bet-placed': TrendingUp,
   'bet-cancelled': X,

@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ElementType, type ReactNode } from 'react';
-import Navbar from '../components/Navbar';
-import { useWallet } from '../components/WalletAdapterProvider';
+import Navbar from '@/components/Navbar';
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { getMarkets, getUserActivity, type Pool, type ActivityItem } from '../lib/stacks-api';
 import { useI18n, supportedLanguages, type AppLanguage } from '../lib/i18n';
 import { useBrowserNotifications } from '../lib/notifications';

@@ -62,6 +62,7 @@ impl TestCtx {
             &String::from_str(&self.env, "Yes"),
             &String::from_str(&self.env, "No"),
             &3600,
+            &MIN_CREATOR_DEPOSIT,
         )
     }
 

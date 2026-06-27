@@ -6,7 +6,7 @@ import Link from 'next/link';
 import type { UserBet } from '../../lib/dashboard-types';
 import type { ClaimTxState } from '../../lib/hooks/useClaimWinnings';
 import { formatCurrency } from '../../lib/dashboard-utils';
-import TransactionReceipt, { TransactionReceiptData } from '../TransactionReceipt';
+import TransactionReceipt, { TransactionReceiptData } from '@/components/TransactionReceipt';
 import { Dialog } from '../../../components/ui/Dialog';
 
 interface ClaimWinningsProps {

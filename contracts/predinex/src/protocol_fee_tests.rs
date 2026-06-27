@@ -70,6 +70,7 @@ fn test_claim_winnings_uses_configured_fee() {
         &String::from_str(&env, "Yes"),
         &String::from_str(&env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
@@ -93,6 +94,7 @@ fn test_create_pool_event_includes_metadata() {
         &String::from_str(&_env, "Yes"),
         &String::from_str(&_env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     assert_eq!(pool_id, 1);
