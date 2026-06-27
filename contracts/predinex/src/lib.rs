@@ -6,8 +6,7 @@
 #![allow(deprecated)]
 extern crate alloc;
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Env,
-    String, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
 };
 
 mod benchmark_tests;
