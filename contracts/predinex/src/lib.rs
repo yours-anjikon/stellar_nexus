@@ -6118,7 +6118,7 @@ impl PredinexContract {
             let tok = allowed_tokens.get(i).unwrap();
             for j in 0..seen.len() {
                 if seen.get(j).unwrap() == tok {
-                    return Err(ContractError::DuplicateOutcomeLabels);
+                    return Err(ContractError::DuplicateToken);
                 }
             }
             if !env
@@ -6233,6 +6233,13 @@ impl PredinexContract {
 
         if amount <= 0 {
             return Err(ContractError::InvalidBetAmount);
+        }
+
+        // Validate referrer is not the user themselves.
+        if let Some(ref ref_addr) = referrer {
+            if ref_addr == &user {
+                return Err(ContractError::SelfReferral);
+            }
         }
 
         // Pool must be a multi-asset pool.
@@ -6408,6 +6415,17 @@ impl PredinexContract {
         let new_total = current_total
             .checked_add(normalized)
             .ok_or(ContractError::PoolTotalOverflow)?;
+
+        // Load user_bet early to check for first-time bet.
+        let mut user_bet: UserBet = env
+            .storage()
+            .persistent()
+            .get(&DataKey::UserBet(pool_id, user.clone()))
+            .unwrap_or(UserBet {
+                amount_a: 0,
+                amount_b: 0,
+                total_bet: 0,
+            });
 
         // Update binary-pool fields for backward compat (odds display, TWAP).
         if outcome == 0 {
