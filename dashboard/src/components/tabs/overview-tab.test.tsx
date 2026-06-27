@@ -1,3 +1,4 @@
+/// <reference types="@testing-library/jest-dom" />
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { OverviewTab } from "./overview-tab";
@@ -20,6 +21,7 @@ describe("OverviewTab Component", () => {
         medicationMonthlyBudget: 500,
         billMonthlyBudget: 500,
         approvalThreshold: 100,
+        holdTimeSeconds: 86400,
       },
       spending: {
         medications: 150,
@@ -27,7 +29,12 @@ describe("OverviewTab Component", () => {
         serviceFees: 0.05,
         total: 350.05,
       },
+      budgetRemaining: {
+        medications: 350,
+        bills: 300,
+      },
       transactionCount: 5,
+      recentTransactions: [],
     },
     agentResult: null,
     agentPaused: false,
@@ -54,9 +61,9 @@ describe("OverviewTab Component", () => {
           response: "I found $10.00 in savings.",
           spending: { spending: { serviceFees: 0.05 } } as any,
           toolCalls: [
-            { tool: "compare_pharmacy_prices", result: { potentialSavings: 10.0 } },
+            { tool: "compare_pharmacy_prices", input: { drug_name: "lisinopril" }, result: { potentialSavings: 10.0 } },
           ],
-          llmUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+          llmUsage: { promptTokens: 100, completionTokens: 50 },
         }}
       />
     );
@@ -67,7 +74,7 @@ describe("OverviewTab Component", () => {
 
   it("calls onRunTask when task buttons are clicked", () => {
     render(<OverviewTab {...mockProps} />);
-    
+
     const medsBtn = screen.getByRole("button", { name: /Compare Medication Prices/i });
     fireEvent.click(medsBtn);
     expect(mockProps.onRunTask).toHaveBeenCalledWith(
