@@ -3493,6 +3493,9 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .remove(&DataKey::UserBet(pool_id, user.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::UserOutcomeBets(pool_id, user.clone()));
 
         env.events().publish(
             (
