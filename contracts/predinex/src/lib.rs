@@ -6304,6 +6304,27 @@ impl PredinexContract {
             return Err(ContractError::BetAboveMaxBet);
         }
 
+        // Enforce pool-wide bet limits (admin-configurable via set_pool_bet_limits).
+        // Checked against the normalised amount so the same cap applies uniformly
+        // across all accepted tokens, matching the behaviour of single-asset place_bet.
+        let pool_min_bet: i128 = env
+            .storage()
+            .persistent()
+            .get::<_, i128>(&DataKey::PoolMinBet(pool_id))
+            .unwrap_or(DEFAULT_MIN_BET_STROOPS);
+        let pool_max_bet: i128 = env
+            .storage()
+            .persistent()
+            .get::<_, i128>(&DataKey::PoolMaxBet(pool_id))
+            .unwrap_or(DEFAULT_MAX_BET_STROOPS);
+        if pool_min_bet > 0 && normalized < pool_min_bet {
+            return Err(ContractError::BetBelowMinBet);
+        }
+        // pool_max_bet == 0 => no maximum.
+        if pool_max_bet > 0 && normalized > pool_max_bet {
+            return Err(ContractError::BetAboveMaxBet);
+        }
+
         // Load and validate pool.
         let mut pool = env
             .storage()
