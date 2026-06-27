@@ -10,7 +10,7 @@
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN, Env,
-    Symbol, Vec,
+    Symbol, Vec, InvokeContract,
 };
 
 mod errors;
@@ -30,8 +30,10 @@ pub enum DataKey {
     Account(Address),
     Proposal(u64),
     ProposalCounter,
-    OracleSigners,
-    OracleThreshold,
+    PriceOracle,
+    Version,
+    // #339 — dedicated oracle role; can set_required_collateral but not upgrade/register
+    OracleAdmin,
 }
 
 #[contracttype]
@@ -56,19 +58,25 @@ pub struct Account {
 
 #[contractimpl]
 impl TariffShieldContract {
-    pub fn initialize(env: Env, admins: Vec<Address>, surety: Address, token: Address, oracle_signers: Vec<Address>) {
+    /// #339 — `oracle_admin` is required auth; set to same as admins[0] if not separate.
+    pub fn initialize(
+        env: Env,
+        admins: Vec<Address>,
+        surety: Address,
+        token: Address,
+        oracle_admin: Address,
+    ) {
         if env.storage().instance().has(&DataKey::Admins) {
             panic_with_error!(&env, Error::AlreadyInitialized);
         }
         for admin in admins.iter() {
             admin.require_auth();
         }
-        if oracle_signers.len() != 3 {
-            panic_with_error!(&env, Error::InvalidSignatureSet);
-        }
+        oracle_admin.require_auth();
         env.storage().instance().set(&DataKey::Admins, &admins);
         env.storage().instance().set(&DataKey::Surety, &surety);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage().instance().set(&DataKey::OracleAdmin, &oracle_admin);
         env.storage().instance().set(&DataKey::ProposalCounter, &0u64);
         env.storage().instance().set(&DataKey::OracleSigners, &oracle_signers);
         env.storage().instance().set(&DataKey::OracleThreshold, &2u32);
@@ -144,58 +152,62 @@ impl TariffShieldContract {
         );
     }
 
-    pub fn set_required_collateral(env: Env, importer: Address, new_required: i128, signers: Vec<Address>) {
+    pub fn set_required_collateral(
+        env: Env,
+        importer: Address,
+        new_required: i128,
+        price_oracle_contract: Option<Address>,
+        bypass_rate_limit: bool,
+    ) {
+        // #339 — only the oracle admin may call this; general admin cannot
+        let oracle_admin = get_oracle_admin(&env);
+        oracle_admin.require_auth();
         if new_required < 0 {
             panic_with_error!(&env, Error::InvalidAmount);
         }
         let mut acct = load_account(&env, &importer);
+        let current_timestamp = env.ledger().timestamp();
+
+        let cooldown_seconds: u64 = 86400;
+        if !bypass_rate_limit && acct.collateral_last_updated > 0 {
+            if current_timestamp < acct.collateral_last_updated + cooldown_seconds {
+                let retry_after = acct.collateral_last_updated + cooldown_seconds;
+                env.events().publish(
+                    (symbol_short!("ratelimit"), importer.clone()),
+                    retry_after,
+                );
+                panic_with_error!(&env, Error::RateLimitExceededError);
+            }
+        }
+
+        let oracle_rate: i128 = if let Some(oracle_addr) = price_oracle_contract.clone() {
+            get_usdc_usd_rate(&env, &oracle_addr)
+        } else if let Some(oracle_addr) = get_price_oracle_optional(&env) {
+            get_usdc_usd_rate(&env, &oracle_addr)
+        } else {
+            10000
+        };
+
+        let adjusted_required = if oracle_rate != 10000 {
+            ((new_required as i128) * 10000) / oracle_rate
+        } else {
+            new_required
+        };
+
+        if oracle_rate < 9800 || oracle_rate > 10200 {
+            env.events().publish(
+                (symbol_short!("depeg"), importer.clone()),
+                oracle_rate,
+            );
+        }
+
         let old_required = acct.required_collateral;
-
-        // Determine how many valid signer approvals are needed
-        let pct_change = if old_required == 0 {
-            100u32
-        } else {
-            let diff = if new_required > old_required { new_required - old_required } else { old_required - new_required };
-            ((diff * 100) / old_required) as u32
-        };
-        let threshold: u32 = if pct_change >= 20 {
-            env.storage().instance().get(&DataKey::OracleThreshold).unwrap_or(2u32)
-        } else {
-            1u32
-        };
-
-        // Validate signers: must be from oracle_signers list, no duplicates, meet threshold
-        let oracle_signers: Vec<Address> = env.storage().instance()
-            .get(&DataKey::OracleSigners)
-            .unwrap_or_else(|| panic_with_error!(&env, Error::NotInitialized));
-
-        if signers.len() < threshold {
-            panic_with_error!(&env, Error::InsufficientSignatures);
-        }
-
-        let mut seen = Vec::new(&env);
-        let mut valid_count: u32 = 0;
-        for signer in signers.iter() {
-            if seen.contains(signer.clone()) {
-                panic_with_error!(&env, Error::InvalidSignatureSet);
-            }
-            seen.push_back(signer.clone());
-            if oracle_signers.contains(signer.clone()) {
-                signer.require_auth();
-                valid_count += 1;
-            }
-        }
-
-        if valid_count < threshold {
-            panic_with_error!(&env, Error::InsufficientSignatures);
-        }
-
-        acct.required_collateral = new_required;
-        acct.collateral_last_updated = env.ledger().timestamp();
+        acct.required_collateral = adjusted_required;
+        acct.collateral_last_updated = current_timestamp;
         save_account(&env, &importer, &acct);
         env.events().publish(
             (symbol_short!("required"), importer.clone()),
-            (old_required, new_required),
+            (old_required, adjusted_required),
         );
     }
 
@@ -403,6 +415,23 @@ impl TariffShieldContract {
         get_token(&env)
     }
 
+    // #339 — view the current oracle admin address
+    pub fn get_oracle_admin(env: Env) -> Address {
+        get_oracle_admin(&env)
+    }
+
+    // #339 — general admin can rotate the oracle admin key (e.g. after compromise)
+    pub fn rotate_oracle_admin(env: Env, caller: Address, new_oracle_admin: Address) {
+        require_admin(&env, &caller);
+        caller.require_auth();
+        new_oracle_admin.require_auth();
+        env.storage().instance().set(&DataKey::OracleAdmin, &new_oracle_admin);
+        env.events().publish(
+            (symbol_short!("oraclrot"), new_oracle_admin.clone()),
+            (),
+        );
+    }
+
     pub fn migrate_account(env: Env, admin: Address, importer: Address, new_account: Account) {
         require_admin(&env, &admin);
         admin.require_auth();
@@ -413,8 +442,35 @@ impl TariffShieldContract {
         );
     }
 
+    pub fn set_price_oracle(env: Env, oracle: Address) {
+        let admin = get_admin(&env);
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::PriceOracle, &oracle);
+        env.events().publish((symbol_short!("oracle"), oracle.clone()), ());
+    }
+
+    pub fn get_price_oracle(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PriceOracle)
+    }
+
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        let admin = get_admin(&env);
+        admin.require_auth();
+        let old_version = env.storage()
+            .instance()
+            .get::<_, Symbol>(&DataKey::Version)
+            .unwrap_or_else(|| symbol_short!("v0_2_0"));
+        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
+        let new_version = symbol_short!("v0_3_0");
+        env.storage().instance().set(&DataKey::Version, &new_version);
+        env.events().publish(
+            (symbol_short!("upgrade"), new_wasm_hash),
+            (old_version, new_version, env.ledger().timestamp()),
+        );
+    }
+
     pub fn version() -> Symbol {
-        symbol_short!("v0_2_0")
+        symbol_short!("v0_3_0")
     }
 }
 
@@ -479,5 +535,28 @@ fn require_fresh_collateral(env: &Env, importer: &Address, acct: &Account) {
         env.events().publish((symbol_short!("stale"), importer.clone()), expiry);
         panic_with_error!(env, Error::StaleOracleError);
     }
+}
+
+fn get_oracle_admin(env: &Env) -> Address {
+    env.storage()
+        .instance()
+        .get(&DataKey::OracleAdmin)
+        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
+}
+
+fn get_price_oracle_optional(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::PriceOracle)
+}
+
+fn get_usdc_usd_rate(env: &Env, oracle: &Address) -> i128 {
+    use soroban_sdk::InvokeContract;
+
+    let rate: i128 = env
+        .invoke_contract(
+            oracle,
+            &symbol_short!("get_usdc_usd_rate"),
+            soroban_sdk::Vec::new(env),
+        );
+    rate
 }
 

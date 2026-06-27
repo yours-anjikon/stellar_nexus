@@ -11,12 +11,17 @@ import { migrate } from "./db.js";
 import { authRouter } from "./routes/auth.js";
 import { importersRouter } from "./routes/importers.js";
 import { adminRouter } from "./routes/admin.js";
+import { privacyRouter } from "./routes/privacy.js";
+import { bondSignaturesRouter, bondWebhookRouter } from "./routes/bond-signatures.js";
 import { startIndexer } from "./indexer.js";
 import { ping } from "./db.js";
 import { pingRpc } from "./stellar.js";
 import { startReconciliationJob } from "./jobs/reconcile-balances.js";
 import { startOracleMonitor } from "./services/oracle-monitor.js";
-import { startRetentionJob } from "./jobs/retention-enforcement.js";
+import { privacyReacceptanceGate } from "./auth.js";
+import { complianceRouter } from "./routes/compliance.js";
+import { kycRouter } from "./routes/kyc.js";
+import { startComplianceReportScheduler } from "./jobs/compliance-report.js";
 
 const app = express();
 
@@ -309,7 +314,13 @@ app.use("/auth/signup", authLimiter);
 app.use("/auth/login", authLimiter);
 app.use("/auth", authRouter);
 app.use("/importers", importersRouter);
+app.use("/importers", kycRouter);
+app.use("/compliance", complianceRouter);
 app.use("/admin", adminRouter);
+app.use("/account", privacyRouter);
+app.use("/privacy", privacyRouter);
+app.use("/bonds", bondWebhookRouter);   // unauthenticated DocuSign webhook
+app.use("/api", bondSignaturesRouter);  // authenticated bond signature routes
 
 Sentry.setupExpressErrorHandler(app);
 
@@ -323,7 +334,7 @@ async function start() {
   await startIndexer();
   startReconciliationJob();
   await startOracleMonitor();
-  startRetentionJob();
+  startComplianceReportScheduler();
   app.listen(env.PORT, () => {
     console.log(`[boot] tariffshield API on :${env.PORT}`);
     console.log(`[boot] contract: ${env.TARIFF_SHIELD_CONTRACT_ID}`);

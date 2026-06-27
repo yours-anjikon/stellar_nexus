@@ -1,9 +1,12 @@
 import { Router, type Request, type Response } from "express";
+import { z } from "zod";
 import { pool } from "../db.js";
-import { authMiddleware, type AuthedRequest } from "../auth.js";
+import { authMiddleware, requireRole, privacyReacceptanceGate, type AuthedRequest } from "../auth.js";
+import { platformKeypair, oracleKeypair } from "../stellar.js";
 
 export const adminRouter = Router();
 adminRouter.use(authMiddleware);
+adminRouter.use(privacyReacceptanceGate);
 
 adminRouter.get("/oracle-alerts", async (req: Request, res: Response) => {
   const user = (req as AuthedRequest).user;
@@ -52,91 +55,51 @@ adminRouter.patch("/oracle-alerts/:id/acknowledge", async (req: Request, res: Re
   res.json({ alert: r.rows[0] });
 });
 
-// ── Issue #313: Monthly retention compliance report ───────────────────────────
-
-adminRouter.get("/retention-report", async (req: Request, res: Response) => {
-  const user = (req as AuthedRequest).user;
-  if (user.role !== "surety_admin") {
-    res.status(403).json({ error: "surety admin only" });
-    return;
-  }
-
-  const [deletedR, retainedR, holdsR, upcomingR] = await Promise.all([
-    // Records deleted/anonymized this month
-    pool.query(
-      `SELECT record_category, SUM(record_count) AS count
-       FROM retention_audit_log
-       WHERE job_run_at >= date_trunc('month', now())
-       GROUP BY record_category`,
-    ),
-    // Records currently past expiry but on hold (retained due to hold)
-    pool.query(
-      `SELECT rh.record_table, COUNT(*) AS count
-       FROM retention_holds rh
-       WHERE rh.released_at IS NULL
-       GROUP BY rh.record_table`,
-    ),
-    // Active holds count
-    pool.query(`SELECT COUNT(*) AS count FROM retention_holds WHERE released_at IS NULL`),
-    // Records expiring in next 90 days
-    pool.query(
-      `SELECT 'importers' AS category, COUNT(*) AS count
-         FROM importers
-         WHERE retention_expires_at BETWEEN now() AND now() + INTERVAL '90 days'
-       UNION ALL
-       SELECT 'tariff_uploads', COUNT(*)
-         FROM tariff_uploads
-         WHERE retention_expires_at BETWEEN now() AND now() + INTERVAL '90 days'
-       UNION ALL
-       SELECT 'aml_screenings', COUNT(*)
-         FROM aml_screenings
-         WHERE retention_expires_at BETWEEN now() AND now() + INTERVAL '90 days'`,
-    ),
-  ]);
-
+// #339 — GET /admin/roles — operational visibility into current role addresses
+adminRouter.get("/roles", requireRole("surety_admin"), (_req: Request, res: Response) => {
   res.json({
-    report_generated_at: new Date().toISOString(),
-    deleted_this_month: deletedR.rows,
-    records_on_hold: retainedR.rows,
-    active_hold_count: Number(holdsR.rows[0]?.count ?? 0),
-    expiring_next_90_days: upcomingR.rows,
+    generalAdmin: platformKeypair.publicKey(),
+    oracleAdmin: oracleKeypair.publicKey(),
+    rolesAreDistinct: platformKeypair.publicKey() !== oracleKeypair.publicKey(),
   });
 });
 
-// ── Issue #313: Retention hold management ────────────────────────────────────
+// #322 — POST /admin/privacy-policy/publish — publish a new privacy policy version
+adminRouter.post(
+  "/privacy-policy/publish",
+  requireRole("surety_admin"),
+  async (req: Request, res: Response) => {
+    const user = (req as AuthedRequest).user;
+    const parse = z.object({
+      versionId: z.string().min(1),
+      effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      changeSummary: z.string().min(10),
+      policyText: z.string().optional(),
+      requiresReacceptance: z.boolean().default(false),
+    }).safeParse(req.body);
 
-adminRouter.post("/retention-holds", async (req: Request, res: Response) => {
-  const user = (req as AuthedRequest).user;
-  if (user.role !== "surety_admin") {
-    res.status(403).json({ error: "surety admin only" });
-    return;
-  }
-  const { record_table, record_id, reason } = req.body as { record_table?: string; record_id?: string; reason?: string };
-  if (!record_table || !record_id || !reason) {
-    res.status(400).json({ error: "record_table, record_id, reason required" });
-    return;
-  }
-  const r = await pool.query(
-    `INSERT INTO retention_holds (record_table, record_id, reason, held_by)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [record_table, record_id, reason, user.id],
-  );
-  res.status(201).json({ hold: r.rows[0] });
-});
+    if (!parse.success) {
+      res.status(400).json({ error: "invalid input", details: parse.error.issues });
+      return;
+    }
+    const { versionId, effectiveDate, changeSummary, policyText, requiresReacceptance } = parse.data;
 
-adminRouter.delete("/retention-holds/:id", async (req: Request, res: Response) => {
-  const user = (req as AuthedRequest).user;
-  if (user.role !== "surety_admin") {
-    res.status(403).json({ error: "surety admin only" });
-    return;
-  }
-  const r = await pool.query(
-    `UPDATE retention_holds SET released_at = now() WHERE id = $1 AND released_at IS NULL RETURNING *`,
-    [req.params.id],
-  );
-  if (!r.rowCount) {
-    res.status(404).json({ error: "hold not found or already released" });
-    return;
-  }
-  res.json({ hold: r.rows[0] });
-});
+    const result = await pool.query(
+      `INSERT INTO privacy_policy_versions
+         (version_id, effective_date, policy_text, change_summary, requires_reacceptance, published_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, version_id, effective_date, requires_reacceptance, published_at`,
+      [versionId, effectiveDate, policyText ?? null, changeSummary, requiresReacceptance, user.id],
+    );
+
+    if (requiresReacceptance) {
+      // Flag all active users so their next request returns 403 with reason
+      await pool.query(
+        `UPDATE users SET privacy_reacceptance_required = TRUE
+         WHERE role IN ('importer', 'surety_admin')`,
+      );
+    }
+
+    res.status(201).json({ version: result.rows[0] });
+  },
+);

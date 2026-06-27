@@ -234,6 +234,133 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_authentication_attempts_email_time ON authentication_attempts(email, attempted_at DESC);
     CREATE INDEX IF NOT EXISTS idx_authentication_attempts_user_id ON authentication_attempts(user_id, attempted_at DESC);
+
+    -- #308: SAML 2.0 SSO columns on users table
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS saml_subject_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_entity_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_provider TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_saml_subject ON users(saml_subject_id, idp_entity_id)
+      WHERE saml_subject_id IS NOT NULL;
+
+    -- #322: privacy policy versioning
+    CREATE TABLE IF NOT EXISTS privacy_policy_versions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      version_id TEXT UNIQUE NOT NULL,
+      effective_date DATE NOT NULL,
+      policy_text TEXT,
+      s3_key TEXT,
+      change_summary TEXT NOT NULL,
+      requires_reacceptance BOOLEAN NOT NULL DEFAULT FALSE,
+      published_by UUID REFERENCES users(id),
+      published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS privacy_policy_acceptances (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      policy_version_id TEXT NOT NULL REFERENCES privacy_policy_versions(version_id),
+      accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ip_address TEXT,
+      acceptance_channel TEXT NOT NULL DEFAULT 'signup'
+        CHECK (acceptance_channel IN ('signup', 'in_app', 'api')),
+      UNIQUE (user_id, policy_version_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_privacy_acceptances_user ON privacy_policy_acceptances(user_id, accepted_at DESC);
+
+    -- Track whether re-acceptance is outstanding (cleared when user accepts latest)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_reacceptance_required BOOLEAN NOT NULL DEFAULT FALSE;
+
+    -- #317: electronic bond signatures (DocuSign)
+    CREATE TABLE IF NOT EXISTS bond_signatures (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      bond_record_id UUID NOT NULL REFERENCES bond_records(id) ON DELETE CASCADE,
+      envelope_id TEXT UNIQUE NOT NULL,
+      signing_url TEXT,
+      status TEXT NOT NULL DEFAULT 'sent'
+        CHECK (status IN ('sent', 'delivered', 'completed', 'declined', 'voided')),
+      signed_document_hash TEXT,
+      completed_at TIMESTAMPTZ,
+      pdf_s3_key TEXT,
+      last_reminder_sent_at TIMESTAMPTZ,
+    -- #312: KYC document storage with retention schedule
+    CREATE TABLE IF NOT EXISTS kyc_documents (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      importer_id UUID NOT NULL REFERENCES importers(id) ON DELETE CASCADE,
+      document_type TEXT NOT NULL CHECK (document_type IN ('articles_of_incorporation', 'ein_confirmation', 'beneficial_ownership_fincen_102')),
+      s3_key_encrypted TEXT NOT NULL,
+      upload_timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+      review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending', 'approved', 'rejected')),
+      reviewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewer_note TEXT,
+      reviewed_at TIMESTAMPTZ,
+      scheduled_deletion_date TIMESTAMPTZ NOT NULL,
+      deleted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_kyc_documents_importer ON kyc_documents(importer_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_kyc_documents_deletion ON kyc_documents(scheduled_deletion_date) WHERE deleted_at IS NULL;
+
+    -- KYC status column on importers (pending/approved/rejected)
+    ALTER TABLE importers ADD COLUMN IF NOT EXISTS kyc_status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (kyc_status IN ('pending', 'approved', 'rejected'));
+
+    -- #314: field encryption key version tracking
+    CREATE TABLE IF NOT EXISTS field_encryption_key_versions (
+      key_version INTEGER PRIMARY KEY,
+      activated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      superseded_at TIMESTAMPTZ,
+      notes TEXT
+    );
+    INSERT INTO field_encryption_key_versions (key_version, notes)
+      VALUES (1, 'initial key version')
+      ON CONFLICT (key_version) DO NOTHING;
+
+    -- EIN is now stored as AES-256-GCM JSON; migrate existing plain text at app layer
+    ALTER TABLE importers ADD COLUMN IF NOT EXISTS ein_encrypted TEXT;
+    ALTER TABLE importers ADD COLUMN IF NOT EXISTS ein_key_version INTEGER REFERENCES field_encryption_key_versions(key_version);
+
+    -- #318: regulatory compliance flags
+    CREATE TABLE IF NOT EXISTS compliance_flags (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      surety_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      importer_id UUID NOT NULL REFERENCES importers(id) ON DELETE CASCADE,
+      flag_type TEXT NOT NULL CHECK (flag_type IN ('aml_high_risk', 'bond_below_cbp_minimum', 'bond_unsigned', 'kyc_rejected', 'bond_renewal_due')),
+      severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+      description TEXT,
+      resolution_status TEXT NOT NULL DEFAULT 'open' CHECK (resolution_status IN ('open', 'resolved')),
+      resolved_by UUID REFERENCES users(id),
+      resolution_note TEXT,
+      resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bond_signatures_bond ON bond_signatures(bond_record_id);
+    CREATE INDEX IF NOT EXISTS idx_bond_signatures_status ON bond_signatures(status, created_at DESC);
+
+    -- Track bond signature status on bond_records for fast lookup
+    ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS signature_status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (signature_status IN ('pending', 'sent', 'completed'));
+    CREATE INDEX IF NOT EXISTS idx_compliance_flags_surety ON compliance_flags(surety_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_compliance_flags_importer ON compliance_flags(importer_id);
+    CREATE INDEX IF NOT EXISTS idx_compliance_flags_open ON compliance_flags(surety_id, resolution_status) WHERE resolution_status = 'open';
+
+    -- #319: monthly compliance reports
+    CREATE TABLE IF NOT EXISTS compliance_reports (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      surety_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      report_month DATE NOT NULL,
+      generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      report_data JSONB NOT NULL,
+      pdf_s3_key TEXT,
+      superseded_at TIMESTAMPTZ,
+      UNIQUE (surety_id, report_month)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_compliance_reports_surety ON compliance_reports(surety_id, report_month DESC);
   `,
     undefined,
     "migrate_schema",

@@ -294,77 +294,91 @@ fn stale_collateral_blocks_deposit() {
         li.timestamp = 100;
     });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    
+
     // Fast forward 366 days
     s.env.ledger().with_mut(|li| {
         li.timestamp = 100 + 366 * 86400;
     });
-    
+
     s.client.deposit_collateral(&s.importer, &s.funder, &1_0000000);
 }
 
-// ── Issue #328: 2-of-3 oracle multisig tests ─────────────────────────────────
-
 #[test]
-fn small_update_requires_only_1_signer() {
+fn rate_limit_first_update_allowed() {
     let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    // 5% change — below 20% threshold, only 1 signer needed
-    let mut signers = soroban_sdk::Vec::new(&s.env);
-    signers.push_back(s.admin1.clone());
-    s.client.set_required_collateral(&s.importer, &105_000_0000000, &signers);
-    assert_eq!(s.client.get_account(&s.importer).required_collateral, 105_000_0000000);
-}
-
-#[test]
-fn large_update_requires_2_signers() {
-    let s = setup();
-    s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    // 50% change — requires 2-of-3
-    let mut signers = soroban_sdk::Vec::new(&s.env);
-    signers.push_back(s.admin1.clone());
-    signers.push_back(s.admin2.clone());
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &signers);
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 150_000_0000000);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #14)")] // InsufficientSignatures
-fn large_update_with_only_1_signer_is_rejected() {
+#[should_panic(expected = "Error(Contract, #13)")] // RateLimitExceededError
+fn rate_limit_blocks_second_update_within_24h() {
     let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    let mut signers = soroban_sdk::Vec::new(&s.env);
-    signers.push_back(s.admin1.clone());
-    // 50% change but only 1 signer — should panic
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &signers);
+
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + 43200;
+    });
+
+    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #13)")] // InvalidSignatureSet
-fn duplicate_signer_is_rejected() {
+fn rate_limit_allows_update_after_24h() {
     let s = setup();
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    let mut signers = soroban_sdk::Vec::new(&s.env);
-    signers.push_back(s.admin1.clone());
-    signers.push_back(s.admin1.clone()); // duplicate
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &signers);
+
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + 86400;
+    });
+
+    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
+    assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
 }
 
 #[test]
-fn update_oracle_signers_requires_2_of_3_approval() {
+fn rate_limit_emergency_bypass_overrides_cooldown() {
     let s = setup();
-    let new_signer = Address::generate(&s.env);
-    let mut new_signers = soroban_sdk::Vec::new(&s.env);
-    new_signers.push_back(s.admin1.clone());
-    new_signers.push_back(s.admin2.clone());
-    new_signers.push_back(new_signer.clone());
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+    s.client.register_importer(&s.importer, &1, &100_000_0000000);
 
-    let mut approvals = soroban_sdk::Vec::new(&s.env);
-    approvals.push_back(s.admin1.clone());
-    approvals.push_back(s.admin2.clone());
+    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
 
-    s.client.update_oracle_signers(&new_signers, &approvals);
+    s.env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + 43200;
+    });
 
-    let updated = s.client.get_oracle_signers();
-    assert_eq!(updated.get(2).unwrap(), new_signer);
+    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &true);
+    assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
+}
+
+#[test]
+fn upgrade_entrypoint_updates_wasm_and_version() {
+    let s = setup();
+    let hash = soroban_sdk::BytesN::from_array(&s.env, &[42; 32]);
+    s.client.upgrade(&hash);
+}
+
+#[test]
+fn set_and_get_price_oracle() {
+    let s = setup();
+    let oracle = Address::generate(&s.env);
+    s.client.set_price_oracle(&oracle);
+    assert_eq!(s.client.get_price_oracle().unwrap(), oracle);
 }

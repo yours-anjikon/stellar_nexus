@@ -16,6 +16,8 @@ pub enum Error {
     ProposalExpired = 10,
     AlreadyVoted = 11,
     StaleOracleError = 12,
-    InvalidSignatureSet = 13,
-    InsufficientSignatures = 14,
+    RateLimitExceededError = 13,
+    OracleCallFailed = 14,
+    // #339 — oracle role is separate from general admin; caller used wrong role
+    UnauthorizedRole = 15,
 }

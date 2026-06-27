@@ -110,38 +110,23 @@ export class TariffShieldClient {
     signers: Keypair[],
     importer: string,
     newRequired: bigint,
+    priceOracleContract?: string,
+    bypassRateLimit?: boolean,
   ): Promise<InvokeResult<null>> {
-    if (signers.length === 0) throw new Error("at least one signer required");
-    // Primary signer builds/submits; all signers sign
-    const primarySigner = signers[0]!;
-    const signersScVal = xdr.ScVal.scvVec(
-      signers.map((kp) => addressToScVal(kp.publicKey()))
-    );
-    return this.invokeAndSubmitMulti(signers, "set_required_collateral", [
+    const args = [
       addressToScVal(importer),
       nativeToScVal(newRequired, { type: "i128" }),
-      signersScVal,
-    ], primarySigner);
-  }
+    ];
 
-  async updateOracleSigners(
-    approvalSigners: Keypair[],
-    newSignerAddresses: string[],
-  ): Promise<InvokeResult<null>> {
-    if (newSignerAddresses.length !== 3) throw new Error("exactly 3 new signers required");
-    const newSignersScVal = xdr.ScVal.scvVec(newSignerAddresses.map(addressToScVal));
-    const approvalsScVal = xdr.ScVal.scvVec(
-      approvalSigners.map((kp) => addressToScVal(kp.publicKey()))
-    );
-    return this.invokeAndSubmitMulti(approvalSigners, "update_oracle_signers", [
-      newSignersScVal,
-      approvalsScVal,
-    ], approvalSigners[0]!);
-  }
+    if (priceOracleContract) {
+      args.push(nativeToScVal({ Some: addressToScVal(priceOracleContract) }, { type: "option" }));
+    } else {
+      args.push(nativeToScVal(null, { type: "option" }));
+    }
 
-  async getOracleSigners(): Promise<string[]> {
-    const raw = await this.simulate("get_oracle_signers", []);
-    return scValToNative(raw) as string[];
+    args.push(nativeToScVal(bypassRateLimit ?? false, { type: "bool" }));
+
+    return this.invokeAndSubmit(signer, "set_required_collateral", args);
   }
 
   async autoTopUp(signer: Keypair, importer: string): Promise<InvokeResult<bigint>> {

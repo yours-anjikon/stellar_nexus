@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import { env } from "./config/env.js";
+import { pool } from "./db.js";
 
 export interface AuthPayload {
   id: string;
@@ -49,4 +50,36 @@ export function requireRole(role: AuthPayload["role"]) {
     }
     next();
   };
+}
+
+// #322 — gate requests when a new privacy policy requires re-acceptance.
+// Exempt: the accept-privacy-policy endpoint itself and the current-version endpoint.
+const PRIVACY_EXEMPT_PATHS = [
+  "/account/accept-privacy-policy",
+  "/privacy/current-version",
+  "/auth/",
+];
+
+export function privacyReacceptanceGate(req: Request, res: Response, next: NextFunction): void {
+  const user = (req as AuthedRequest).user;
+  if (!user) { next(); return; }
+
+  const isExempt = PRIVACY_EXEMPT_PATHS.some(p => req.path.includes(p));
+  if (isExempt) { next(); return; }
+
+  // Async check — look up live DB value (not stale JWT claim)
+  pool.query<{ privacy_reacceptance_required: boolean }>(
+    "SELECT privacy_reacceptance_required FROM users WHERE id = $1",
+    [user.id],
+  ).then(result => {
+    if (result.rows[0]?.privacy_reacceptance_required) {
+      res.status(403).json({
+        error: "privacy policy update requires re-acceptance",
+        reason: "privacy_policy_update",
+        action: "POST /account/accept-privacy-policy",
+      });
+      return;
+    }
+    next();
+  }).catch(() => next()); // fail-open: don't block if DB unreachable
 }

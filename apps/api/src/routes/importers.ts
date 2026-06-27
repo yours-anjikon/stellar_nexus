@@ -3,8 +3,8 @@ import { createHash } from "crypto";
 import { Keypair } from "@stellar/stellar-sdk";
 import { z } from "zod";
 import { pool } from "../db.js";
-import { authMiddleware, type AuthedRequest } from "../auth.js";
-import { contractClient, explorerTx, platformKeypair, suretyKeypair, getOracleSignerKeypairs, getRequiredCollateralOnChain } from "../stellar.js";
+import { authMiddleware, privacyReacceptanceGate, type AuthedRequest } from "../auth.js";
+import { contractClient, explorerTx, platformKeypair, suretyKeypair } from "../stellar.js";
 import { lookupCbpDutyRate } from "../services/cbp-duty-lookup.js";
 import { screenImporterEntity, screenWalletAddress } from "../services/aml-screening.js";
 import { validateBondForm301 } from "../services/cbp-bond-validation.js";
@@ -12,6 +12,7 @@ import { env } from "../config/env.js";
 
 export const importersRouter = Router();
 importersRouter.use(authMiddleware);
+importersRouter.use(privacyReacceptanceGate);
 
 const CreateImporterSchema = z.object({
   legalName: z.string().min(1),
@@ -274,36 +275,45 @@ importersRouter.post("/:id/upload-tariff-csv", async (req: Request, res: Respons
   // Token is XLM in the demo (1 USD ≈ 1 XLM for stand-in); 7 decimals.
   const requiredStroops = BigInt(Math.round(requiredCollateralUSD * 1e7));
 
-  // Determine required signer count based on change magnitude (>=20% requires 2-of-3)
-  const currentAcct = await contractClient.getAccount(importer.stellar_address).catch(() => null);
-  const currentRequired = currentAcct ? Number(currentAcct.requiredCollateral) : 0;
-  const pctChange = currentRequired > 0
-    ? Math.abs(Number(requiredStroops) - currentRequired) / currentRequired
-    : 1;
-  const signerCount = pctChange >= 0.20 ? 2 : 1;
-  const signers = getOracleSignerKeypairs(signerCount);
+  try {
+    const onChain = await contractClient.setRequiredCollateral(
+      platformKeypair,
+      importer.stellar_address,
+      requiredStroops,
+      env.PRICE_ORACLE_CONTRACT_ID,
+      false,
+    );
+    await pool.query(
+      "INSERT INTO tariff_uploads (importer_id, filename, annual_duty_total, computed_required_collateral, applied_tx) VALUES ($1, $2, $3, $4, $5)",
+      [importer.id, parse.data.filename ?? null, annualDutyTotal, requiredStroops.toString(), onChain.txHash],
+    );
+    await pool.query(
+      "INSERT INTO contract_events (importer_id, kind, amount, tx_hash) VALUES ($1, 'required_changed', $2, $3)",
+      [importer.id, requiredStroops.toString(), onChain.txHash],
+    );
 
-  const onChain = await contractClient.setRequiredCollateral(
-    signers,
-    importer.stellar_address,
-    requiredStroops,
-  );
-  await pool.query(
-    "INSERT INTO tariff_uploads (importer_id, filename, annual_duty_total, computed_required_collateral, applied_tx) VALUES ($1, $2, $3, $4, $5)",
-    [importer.id, parse.data.filename ?? null, annualDutyTotal, requiredStroops.toString(), onChain.txHash],
-  );
-  await pool.query(
-    "INSERT INTO contract_events (importer_id, kind, amount, tx_hash) VALUES ($1, 'required_changed', $2, $3)",
-    [importer.id, requiredStroops.toString(), onChain.txHash],
-  );
-
-  res.json({
-    annualDutyTotal,
-    bondFaceValue,
-    requiredCollateralStroops: requiredStroops.toString(),
-    txHash: onChain.txHash,
-    txUrl: explorerTx(onChain.txHash),
-  });
+    res.json({
+      annualDutyTotal,
+      bondFaceValue,
+      requiredCollateralStroops: requiredStroops.toString(),
+      txHash: onChain.txHash,
+      txUrl: explorerTx(onChain.txHash),
+    });
+  } catch (err: any) {
+    const errMsg = String(err);
+    if (errMsg.includes("Error(Contract, #13)") || errMsg.includes("RateLimitExceeded")) {
+      const retryAfter = Math.ceil(Date.now() / 1000) + 86400;
+      res.status(429)
+        .set("Retry-After", String(retryAfter))
+        .json({
+          error: "rate limit exceeded",
+          retryAfter,
+          message: "collateral requirements can only be updated once per 24 hours",
+        });
+      return;
+    }
+    throw err;
+  }
 });
 
 const DepositSchema = z.object({
@@ -317,6 +327,16 @@ importersRouter.post("/:id/deposit", async (req: Request, res: Response) => {
     res.status(404).json({ error: "not found" });
     return;
   }
+
+  // #312: block collateral deposits until KYC is approved (CIP compliance)
+  if (importer.kyc_status !== "approved") {
+    res.status(403).json({
+      error: "KYC approval required before collateral deposits",
+      kycStatus: importer.kyc_status,
+    });
+    return;
+  }
+
   const parse = DepositSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: "invalid input" });
