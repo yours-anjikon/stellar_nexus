@@ -11,7 +11,7 @@
 import "dotenv/config";
 import { createHash } from "crypto";
 import { existsSync, mkdirSync } from "fs";
-import express from "express";
+import express, { type Express } from "express";
 import OpenAI from "openai";
 import { Keypair, Horizon } from "@stellar/stellar-sdk";
 import { createCorsMiddleware } from "../shared/cors.ts";
@@ -30,7 +30,7 @@ import {
   agentToolCallsTotal,
   agentLlmTokensTotal,
   agentLlmIterationTokens,
-  agentLlmContextUsageRatio,
+  agentLlmContextUsageRatio, agentLlmErrorTotal,
 } from "../shared/metrics.ts";
 import {
   comparePharmacyPrices,
@@ -465,7 +465,7 @@ async function runAgent(task: string) {
 }
 
 // Express API
-const app = express();
+const app: Express = express();
 
 app.use("/agent/audit", auditRouter);
 app.use("/agent", rateLimiters.agent);
