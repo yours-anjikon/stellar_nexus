@@ -7,7 +7,7 @@ TEST_FILES_DIR = "contracts/predinex/src/"
 def main():
     test_files = glob.glob(os.path.join(TEST_FILES_DIR, "*.rs"))
     for filepath in test_files:
-        if filepath.endswith("lib.rs") or filepath.endswith("pool_templates.rs"):
+        if filepath.endswith("lib.rs"):
             continue
             
         with open(filepath, "r") as f:

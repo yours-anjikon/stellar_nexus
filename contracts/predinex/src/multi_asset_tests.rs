@@ -352,3 +352,79 @@ fn ma_7_collect_fees_transfers_pending_fees_to_treasury() {
         "treasury alt fee"
     );
 }
+
+/// ma_8: collect_multi_asset_fees updates Treasury and PoolTreasuryCredited tracking.
+#[test]
+fn ma_8_collect_fees_updates_treasury_ledger() {
+    let t = setup_ma();
+    let creator = Address::generate(&t.env);
+    let user_a = Address::generate(&t.env);
+    let user_b = Address::generate(&t.env);
+
+    // Exchange rates: 1 base = 1 base unit, 1 alt = 0.5 base units.
+    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
+
+    let pool_id = make_ma_pool(&t, &creator);
+
+    // user_a bets 500 base tokens (normalized: 500).
+    t.base_admin.mint(&user_a, &500i128);
+    t.client.place_multi_asset_bet(
+        &user_a, &pool_id, &0u32, &500i128, &t.base_token, &None::<Address>,
+    );
+
+    // user_b bets 600 alt tokens (normalized: 600 × 0.5 = 300).
+    t.alt_admin.mint(&user_b, &600i128);
+    t.client.place_multi_asset_bet(
+        &user_b, &pool_id, &1u32, &600i128, &t.alt_token, &None::<Address>,
+    );
+
+    // Total normalized = 800, fee 2% = 16.
+    // Per-token fees: base = 500 × 0.02 = 10, alt = 600 × 0.02 = 12.
+    // Normalized fees: base = 10 × 1.0 = 10, alt = 12 × 0.5 = 6, total = 16.
+    t.env.ledger().with_mut(|l| l.timestamp = 3_701);
+    t.client.settle_pool(&creator, &pool_id, &0u32);
+
+    // Read treasury balance before fee collection.
+    let treasury_before = t.client.get_treasury_balance();
+    let pool_revenue_before = t.client.get_pool_protocol_revenue(&pool_id);
+
+    // First claim populates PoolTokenFeePending.
+    t.client.claim_multi_asset_winnings(&user_a, &pool_id);
+
+    // get_pool_protocol_revenue should now show pending fees (even though not yet collected).
+    let pool_revenue_pending = t.client.get_pool_protocol_revenue(&pool_id);
+    assert_eq!(
+        pool_revenue_pending.treasury_credited,
+        16,
+        "get_pool_protocol_revenue should include pending fees"
+    );
+
+    // Treasury collects fees.
+    t.client.collect_multi_asset_fees(&t.treasury, &pool_id);
+
+    // Read treasury balance after fee collection.
+    let treasury_after = t.client.get_treasury_balance();
+    let pool_revenue_after = t.client.get_pool_protocol_revenue(&pool_id);
+
+    // Verify Treasury ledger was credited with normalized fee amount (16).
+    assert_eq!(
+        treasury_after - treasury_before,
+        16,
+        "Treasury should be credited with normalized fee"
+    );
+
+    // Verify PoolTreasuryCredited was updated and still shows 16 (no double-counting).
+    assert_eq!(
+        pool_revenue_after.treasury_credited,
+        16,
+        "PoolTreasuryCredited should track the normalized fee"
+    );
+
+    // Verify the fee was only credited once (not double-counted).
+    assert_eq!(
+        pool_revenue_pending.treasury_credited,
+        pool_revenue_after.treasury_credited,
+        "Pending and collected amounts should match (no double-counting)"
+    );
+}
