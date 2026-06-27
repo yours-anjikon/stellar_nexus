@@ -4671,6 +4671,36 @@ impl PredinexContract {
         Ok(())
     }
 
+    /// #632 — Set (or replace) the contract admin address.
+    ///
+    /// The admin role is a dedicated privileged account separate from the
+    /// treasury recipient and freeze admin. Only the treasury recipient may
+    /// assign the admin. The admin address is used by `require_admin` for any
+    /// operation that needs a contract-level admin check.
+    pub fn set_admin(
+        env: Env,
+        caller: Address,
+        admin: Address,
+    ) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Admin, &admin);
+
+        env.events().publish(
+            (Symbol::new(&env, "admin_set"), event_version(&env)),
+            admin,
+        );
+        Ok(())
+    }
+
+    /// #632 — Return the current contract admin address, if one has been set.
+    pub fn get_admin(env: Env) -> Option<Address> {
+        env.storage().persistent().get(&DataKey::Admin)
+    }
+
     /// Freeze a pool, blocking new bets and claim payouts.
     /// Callable only by the freeze admin.
     pub fn freeze_pool(env: Env, caller: Address, pool_id: u32) -> Result<(), ContractError> {
