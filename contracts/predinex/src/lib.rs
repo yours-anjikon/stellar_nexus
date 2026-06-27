@@ -358,6 +358,10 @@ pub enum ContractError {
     NoReferralRewards = 62,
     /// Pool grace period has not expired yet.
     PoolNotExpiredGracePeriod = 63,
+    /// Computed pool deadline is not in the future.
+    DeadlineInPast = 64,
+    /// Creator deposit is below the minimum required at pool creation.
+    InsufficientCreatorDeposit = 65,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -5265,6 +5269,18 @@ impl PredinexContract {
         Ok(())
     }
 
+    fn require_admin(env: &Env, caller: &Address) -> Result<(), ContractError> {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .ok_or(ContractError::NotInitialized)?;
+        if caller != &admin {
+            return Err(ContractError::Unauthorized);
+        }
+        Ok(())
+    }
+
     fn require_treasury_recipient(env: &Env, caller: &Address) -> Result<(), ContractError> {
         let treasury_recipient: Address = env
             .storage()
@@ -6221,9 +6237,19 @@ impl PredinexContract {
                 .checked_add(normalized)
                 .ok_or(ContractError::PoolTotalOverflow)?;
         }
+        let mut user_bet: UserBet = env
+            .storage()
+            .persistent()
+            .get(&DataKey::UserBet(pool_id, user.clone()))
+            .unwrap_or(UserBet {
+                amount_a: 0,
+                amount_b: 0,
+                total_bet: 0,
+            });
+
         let is_first_bet = user_bet.total_bet == 0;
-            if is_first_bet {
-             pool.participant_count += 1;
+        if is_first_bet {
+            pool.participant_count += 1;
         }
         pool.cumulative_volume = pool
             .cumulative_volume
@@ -6248,15 +6274,6 @@ impl PredinexContract {
         );
 
         // Update UserBet and UserOutcomeBets with normalised amount.
-        let mut user_bet: UserBet = env
-            .storage()
-            .persistent()
-            .get(&DataKey::UserBet(pool_id, user.clone()))
-            .unwrap_or(UserBet {
-                amount_a: 0,
-                amount_b: 0,
-                total_bet: 0,
-            });
         if outcome == 0 {
             user_bet.amount_a = user_bet
                 .amount_a
