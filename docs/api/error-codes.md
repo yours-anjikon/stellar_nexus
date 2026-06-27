@@ -145,13 +145,15 @@ The `details` array is **only present on 400 and 422 responses** that originate 
 
 ---
 
-### Session — `POST /auth/logout`
+### Session — `POST /auth/logout`, all protected routes
 
 | HTTP Status | Error Message | Condition |
 |-------------|---------------|-----------|
 | 401 | `"missing bearer token"` | No Authorization header |
-| 401 | `"invalid token"` | Token is expired or invalid |
-| 401 | `"session expired or not found"` | Session ID in the JWT has been revoked or timed out (15-minute inactivity) |
+| 401 | `"invalid token"` | Token is expired or malformed |
+| 401 | `"re-authentication required"` | JWT does not contain a `sessionId` — token was issued before session management was deployed; client must re-login |
+| 401 | `"session expired or not found"` | Session has been revoked (logout) or timed out (15-minute inactivity) |
+| 503 | `"session validation unavailable"` | Database is unreachable during session validation; fail-closed by design — the request is blocked until the database recovers |
 
 ---
 

@@ -69,7 +69,8 @@ authRouter.post("/signup", async (req: Request, res: Response) => {
       );
     }
 
-    res.json({ token: signToken({ id: u.id, email: u.email, role: u.role }), user: u });
+    const sessionId = await createSession(u.id, req.ip ?? undefined, req.get("user-agent") ?? undefined);
+    res.json({ token: signToken({ id: u.id, email: u.email, role: u.role, sessionId }), user: u });
   } catch (err) {
     const e = err as { code?: string };
     if (e.code === "23505") {
@@ -302,7 +303,8 @@ authRouter.post("/saml/:provider/callback", async (req: Request, res: Response) 
     userRole = inserted.rows[0]!.role;
   }
 
-  const token = signToken({ id: userId, email: userEmail, role: userRole });
+  const sessionId = await createSession(userId, req.ip ?? undefined, req.get("user-agent") ?? undefined);
+  const token = signToken({ id: userId, email: userEmail, role: userRole, sessionId });
   const relayState = req.body?.RelayState as string | undefined;
 
   // Redirect browser to frontend with token, or return JSON for API clients

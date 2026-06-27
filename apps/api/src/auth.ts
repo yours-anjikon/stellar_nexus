@@ -96,21 +96,28 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   (req as AuthedRequest).user = payload;
 
   // SOC 2 CC6.1: validate server-side session (15-min inactivity timeout).
-  // Tokens issued before session management was introduced have no sessionId —
-  // those are accepted as-is until they expire naturally (7-day JWT TTL).
-  if (payload.sessionId) {
-    validateSession(payload.sessionId).then((valid) => {
-      if (!valid) {
-        res.status(401).json({ error: "session expired or not found" });
-        return;
-      }
-      touchSession(payload.sessionId!);
-      next();
-    }).catch(() => next()); // fail-open if DB unreachable
+  //
+  // Tokens without sessionId were issued before session management was deployed.
+  // They are rejected rather than accepted to prevent legacy-token bypass. Any
+  // client that receives a 401 here must re-authenticate, which will produce a
+  // token with a sessionId.
+  if (!payload.sessionId) {
+    res.status(401).json({ error: "re-authentication required" });
     return;
   }
 
-  next();
+  validateSession(payload.sessionId).then((valid) => {
+    if (!valid) {
+      res.status(401).json({ error: "session expired or not found" });
+      return;
+    }
+    touchSession(payload.sessionId!);
+    next();
+  }).catch(() => {
+    // Fail closed: if session validation is unavailable the request is blocked.
+    // This ensures the 15-minute inactivity control is never bypassed by a DB outage.
+    res.status(503).json({ error: "session validation unavailable" });
+  });
 }
 
 export function requireRole(role: AuthPayload["role"]) {

@@ -15,8 +15,8 @@ This document maps TariffShield's technical access controls to the SOC 2 Type II
 | Password hashing | bcrypt, cost factor 12 | `apps/api/src/auth.ts` → `hashPassword()` | `password_hash` column in `users` table never stores plaintext |
 | JWT issuance | HS256, 7-day TTL | `apps/api/src/auth.ts` → `signToken()` | `JWT_SECRET` environment variable; token payload contains `id`, `email`, `role`, `sessionId` |
 | Bearer token validation | Every request to protected routes | `apps/api/src/auth.ts` → `authMiddleware()` | 401 on missing or expired token; logged in application stdout |
-| Session creation | On every successful login | `apps/api/src/routes/auth.ts` login handler | Row in `user_sessions` table with `created_at`, `ip_address`, `user_agent` |
-| Session inactivity timeout | 15 minutes of no API activity | `apps/api/src/auth.ts` → `authMiddleware()` + `apps/api/src/db.ts` → `validateSession()` | Session row `last_activity` checked on every request; expired session → 401 |
+| Session creation | On every successful login, signup, and SAML SSO callback | `apps/api/src/routes/auth.ts` login, signup, and SAML callback handlers | Row in `user_sessions` table with `created_at`, `ip_address`, `user_agent`; `sessionId` always embedded in issued JWT |
+| Session inactivity timeout | 15 minutes of no API activity | `apps/api/src/auth.ts` → `authMiddleware()` + `apps/api/src/db.ts` → `validateSession()` | Session row `last_activity` checked on every request; expired session → 401; DB unavailable → 503 (fail-closed, never fail-open) |
 | Session revocation on logout | `POST /auth/logout` | `apps/api/src/routes/auth.ts` logout handler | `revoked_at` set on `user_sessions` row |
 | Concurrent session limits | 5 (importer), 3 (surety_admin) | `apps/api/src/auth.ts` → `MAX_SESSIONS`; enforced in `apps/api/src/routes/auth.ts` login handler | Oldest session revoked before new session is issued when limit is reached |
 
