@@ -325,6 +325,16 @@ importersRouter.post("/:id/deposit", async (req: Request, res: Response) => {
     res.status(404).json({ error: "not found" });
     return;
   }
+
+  // #312: block collateral deposits until KYC is approved (CIP compliance)
+  if (importer.kyc_status !== "approved") {
+    res.status(403).json({
+      error: "KYC approval required before collateral deposits",
+      kycStatus: importer.kyc_status,
+    });
+    return;
+  }
+
   const parse = DepositSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: "invalid input" });
