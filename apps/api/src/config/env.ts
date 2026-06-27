@@ -42,6 +42,18 @@ export const Env = z.object({
   DOCUSIGN_BASE_PATH: z.string().url().optional().describe("DocuSign base API path (demo or prod)"),
   DOCUSIGN_PRIVATE_KEY: z.string().optional().describe("DocuSign RSA private key for JWT grant"),
   DOCUSIGN_WEBHOOK_HMAC_KEY: z.string().optional().describe("HMAC key for verifying DocuSign Connect webhook signatures"),
+  // #314 — field-level encryption
+  FIELD_ENCRYPTION_KEY: z.string().min(32).optional().describe("AES-256-GCM key for encrypting EIN and PII fields (min 32 chars; use KMS-derived key in prod)"),
+  FIELD_ENCRYPTION_KEY_VERSION: z.coerce.number().int().positive().default(1).describe("Active key version for field encryption; increment on rotation"),
+
+  // #312/#319 — S3 document storage
+  S3_KYC_BUCKET: z.string().optional().describe("S3 bucket name for KYC document storage (SSE-KMS encrypted)"),
+  S3_REPORTS_BUCKET: z.string().optional().describe("S3 bucket name for compliance report PDFs"),
+  AWS_REGION: z.string().default("us-east-1").describe("AWS region for S3/KMS operations"),
+
+  // #319 — report email notifications
+  SENDGRID_API_KEY: z.string().optional().describe("SendGrid API key for compliance report email notifications"),
+  REPORT_FROM_EMAIL: z.string().email().optional().describe("From address for compliance report notification emails"),
 });
 
 const parsed = Env.safeParse(process.env);

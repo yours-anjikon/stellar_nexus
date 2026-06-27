@@ -284,6 +284,56 @@ export async function migrate(): Promise<void> {
       completed_at TIMESTAMPTZ,
       pdf_s3_key TEXT,
       last_reminder_sent_at TIMESTAMPTZ,
+    -- #312: KYC document storage with retention schedule
+    CREATE TABLE IF NOT EXISTS kyc_documents (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      importer_id UUID NOT NULL REFERENCES importers(id) ON DELETE CASCADE,
+      document_type TEXT NOT NULL CHECK (document_type IN ('articles_of_incorporation', 'ein_confirmation', 'beneficial_ownership_fincen_102')),
+      s3_key_encrypted TEXT NOT NULL,
+      upload_timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+      review_status TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending', 'approved', 'rejected')),
+      reviewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewer_note TEXT,
+      reviewed_at TIMESTAMPTZ,
+      scheduled_deletion_date TIMESTAMPTZ NOT NULL,
+      deleted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_kyc_documents_importer ON kyc_documents(importer_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_kyc_documents_deletion ON kyc_documents(scheduled_deletion_date) WHERE deleted_at IS NULL;
+
+    -- KYC status column on importers (pending/approved/rejected)
+    ALTER TABLE importers ADD COLUMN IF NOT EXISTS kyc_status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (kyc_status IN ('pending', 'approved', 'rejected'));
+
+    -- #314: field encryption key version tracking
+    CREATE TABLE IF NOT EXISTS field_encryption_key_versions (
+      key_version INTEGER PRIMARY KEY,
+      activated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      superseded_at TIMESTAMPTZ,
+      notes TEXT
+    );
+    INSERT INTO field_encryption_key_versions (key_version, notes)
+      VALUES (1, 'initial key version')
+      ON CONFLICT (key_version) DO NOTHING;
+
+    -- EIN is now stored as AES-256-GCM JSON; migrate existing plain text at app layer
+    ALTER TABLE importers ADD COLUMN IF NOT EXISTS ein_encrypted TEXT;
+    ALTER TABLE importers ADD COLUMN IF NOT EXISTS ein_key_version INTEGER REFERENCES field_encryption_key_versions(key_version);
+
+    -- #318: regulatory compliance flags
+    CREATE TABLE IF NOT EXISTS compliance_flags (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      surety_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      importer_id UUID NOT NULL REFERENCES importers(id) ON DELETE CASCADE,
+      flag_type TEXT NOT NULL CHECK (flag_type IN ('aml_high_risk', 'bond_below_cbp_minimum', 'bond_unsigned', 'kyc_rejected', 'bond_renewal_due')),
+      severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+      description TEXT,
+      resolution_status TEXT NOT NULL DEFAULT 'open' CHECK (resolution_status IN ('open', 'resolved')),
+      resolved_by UUID REFERENCES users(id),
+      resolution_note TEXT,
+      resolved_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
@@ -294,6 +344,23 @@ export async function migrate(): Promise<void> {
     -- Track bond signature status on bond_records for fast lookup
     ALTER TABLE bond_records ADD COLUMN IF NOT EXISTS signature_status TEXT NOT NULL DEFAULT 'pending'
       CHECK (signature_status IN ('pending', 'sent', 'completed'));
+    CREATE INDEX IF NOT EXISTS idx_compliance_flags_surety ON compliance_flags(surety_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_compliance_flags_importer ON compliance_flags(importer_id);
+    CREATE INDEX IF NOT EXISTS idx_compliance_flags_open ON compliance_flags(surety_id, resolution_status) WHERE resolution_status = 'open';
+
+    -- #319: monthly compliance reports
+    CREATE TABLE IF NOT EXISTS compliance_reports (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      surety_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      report_month DATE NOT NULL,
+      generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      report_data JSONB NOT NULL,
+      pdf_s3_key TEXT,
+      superseded_at TIMESTAMPTZ,
+      UNIQUE (surety_id, report_month)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_compliance_reports_surety ON compliance_reports(surety_id, report_month DESC);
   `,
     undefined,
     "migrate_schema",
