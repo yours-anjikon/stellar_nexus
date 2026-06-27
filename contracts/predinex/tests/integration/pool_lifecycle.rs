@@ -35,7 +35,7 @@ fn setup() -> Ctx<'static> {
 
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token_asset.address(), &treasury);
+    client.initialize(&token_asset.address(), &treasury, &treasury);
 
     let token = token::Client::new(&env, &token_asset.address());
     let token_admin = token::StellarAssetClient::new(&env, &token_asset.address());
@@ -109,7 +109,7 @@ fn l2_lp_deposit_bet_settle_lp_withdraw() {
 
 /// L3: Bettor on losing side has no winnings to claim.
 #[test]
-#[should_panic(expected = "No winnings to claim")]
+#[should_panic(expected = "Error(Contract, #25)")]
 fn l3_losing_bettor_cannot_claim() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -124,7 +124,7 @@ fn l3_losing_bettor_cannot_claim() {
     ctx.client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>);
 
     expire(&ctx);
-    ctx.client.settle_pool(&creator, &pool_id, &0); // A wins
+    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
 
     ctx.client.claim_winnings(&loser, &pool_id);
 }
@@ -148,7 +148,7 @@ fn l4_two_winners_proportional_payout() {
     ctx.client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>); // 200 on B
 
     expire(&ctx);
-    ctx.client.settle_pool(&creator, &pool_id, &0); // A wins
+    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
 
     // Total pool = 600. Fee 2% = 12. Net = 588. Winners total = 400.
     // w1 share = 300 * 588 / 400 = 441
@@ -169,7 +169,7 @@ fn l4_two_winners_proportional_payout() {
 
 /// E1: Premature withdrawal attempt (bet after pool expired is rejected).
 #[test]
-#[should_panic(expected = "Pool expired")]
+#[should_panic(expected = "Error(Contract, #7)")]
 fn e1_bet_after_expiry_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -184,7 +184,7 @@ fn e1_bet_after_expiry_rejected() {
 
 /// E2: Claiming on an unsettled pool panics.
 #[test]
-#[should_panic(expected = "Pool not settled")]
+#[should_panic(expected = "Error(Contract, #18)")]
 fn e2_claim_before_settlement_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -200,14 +200,14 @@ fn e2_claim_before_settlement_rejected() {
 
 /// E3: Settling before expiry is rejected.
 #[test]
-#[should_panic(expected = "Pool has not expired yet")]
+#[should_panic(expected = "Error(Contract, #8)")]
 fn e3_settle_before_expiry_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
 
     let pool_id = make_pool(&ctx, &creator);
     // Timestamp is still 0, pool expires at 3600
-    ctx.client.settle_pool(&creator, &pool_id, &0);
+    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0);
 }
 
 /// E4: Minimum position — single token bet, single token LP deposit.
@@ -235,7 +235,7 @@ fn e5_maximum_positions_both_sides() {
     ctx.client.place_bet(&side_b, &pool_id, &1, &big_amount, &None::<Address>);
 
     expire(&ctx);
-    ctx.client.settle_pool(&creator, &pool_id, &1); // B wins
+    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &1); // B wins
 
     // side_b is the sole winner: gets net pool = 2_000_000_000 - 2% = 1_960_000_000
     let winnings = ctx.client.claim_winnings(&side_b, &pool_id);
@@ -268,7 +268,7 @@ fn e8_voided_pool_issues_refunds() {
 
 /// E9: Dispute after window expires is rejected.
 #[test]
-#[should_panic(expected = "Dispute window expired")]
+#[should_panic(expected = "Error(Contract, #28)")]
 fn e9_dispute_after_window_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -280,7 +280,7 @@ fn e9_dispute_after_window_rejected() {
     ctx.client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
 
     expire(&ctx);
-    ctx.client.settle_pool(&creator, &pool_id, &0);
+    ctx.client.settle_pool(&ctx.client.get_admin(), &pool_id, &0);
 
     // Advance ledger past dispute window (7 days + 1 second)
     ctx.env.ledger().with_mut(|l| {
