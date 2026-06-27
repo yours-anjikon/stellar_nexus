@@ -5208,3 +5208,67 @@ fn test_get_pool_count_not_initialized() {
 
     client.get_pool_count();
 }
+
+#[test]
+fn test_refund_expired_pool() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+
+    token_admin_client.mint(&user1, &1000);
+    token_admin_client.mint(&user2, &1000);
+
+    let duration = 3600;
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "A"),
+        &String::from_str(&env, "B"),
+        &duration,
+    );
+
+    client.place_bet(&user1, &pool_id, &0, &500, &None);
+    client.place_bet(&user2, &pool_id, &1, &500, &None);
+
+    assert_eq!(token.balance(&user1), 500);
+    assert_eq!(token.balance(&user2), 500);
+
+    // Try to refund before expiry + grace period
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + duration + 10;
+    });
+    
+    let res = client.try_refund_expired_pool(&pool_id);
+    assert!(res.is_err());
+
+    // Advance beyond grace period
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1000 + duration + GRACE_PERIOD_SECS + 1;
+    });
+
+    client.refund_expired_pool(&pool_id);
+
+    assert_eq!(token.balance(&user1), 1000);
+    assert_eq!(token.balance(&user2), 1000);
+
+    let pool = client.get_pool(&pool_id).unwrap();
+    assert_eq!(pool.status, PoolStatus::Cancelled);
+}

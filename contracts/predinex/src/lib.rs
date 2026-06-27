@@ -140,6 +140,8 @@ pub enum DataKey {
     TreasuryWithdrawalWindowSecs,
     /// #363 — Current treasury withdrawal rate-limit usage state.
     TreasuryWithdrawalState,
+    /// List of all bettor addresses in a pool.
+    PoolBettors(u32),
     /// Contract-wide cumulative betting volume across all pools, incremented by
     /// the bet amount on every `place_bet`. Read via `get_total_contract_volume`.
     TotalContractVolume,
@@ -264,6 +266,9 @@ const DEFAULT_LARGE_POOL_COOLING_PERIOD_SECS: u64 = 0;
 pub const DEFAULT_TWAP_PERIOD_SECS: u64 = 3_600;
 /// Minimum time between TWAP snapshots for a given pool/outcome.
 pub const MIN_UPDATE_INTERVAL: u64 = 60;
+
+pub const GRACE_PERIOD_SECS: u64 = 7 * 24 * 60 * 60; // 7 days grace period for refunds
+
 /// Odds are represented in basis points: 10_000 = 100%.
 pub const ODDS_SCALE: i128 = 10_000;
 const MAX_TWAP_SNAPSHOTS: u32 = 64;
@@ -341,6 +346,8 @@ pub enum ContractError {
     SelfReferral = 61,
     /// No referral rewards available to claim.
     NoReferralRewards = 62,
+    /// Pool grace period has not expired yet.
+    PoolNotExpiredGracePeriod = 63,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -829,6 +836,13 @@ pub struct BetCancelledEvent {
     pub pool_id: u32,
     pub outcome: u32,
     pub amount: i128,
+}
+
+/// Event payload emitted by `refund_expired_pool`.
+#[derive(Clone)]
+#[contracttype]
+pub struct PoolRefundedEvent {
+    pub total_refunded: i128,
 }
 
 /// Event payload emitted by `extend_pool_duration`.
@@ -2344,6 +2358,21 @@ impl PredinexContract {
         let is_first_bet = user_bet.total_bet == 0;
         if is_first_bet {
             pool.participant_count += 1;
+            
+            let mut bettors = env
+                .storage()
+                .persistent()
+                .get::<_, Vec<Address>>(&DataKey::PoolBettors(pool_id))
+                .unwrap_or_else(|| Vec::new(&env));
+            bettors.push_back(user.clone());
+            env.storage()
+                .persistent()
+                .set(&DataKey::PoolBettors(pool_id), &bettors);
+            env.storage().persistent().extend_ttl(
+                &DataKey::PoolBettors(pool_id),
+                POOL_BUMP_THRESHOLD,
+                POOL_BUMP_TARGET,
+            );
         }
 
         env.storage()
@@ -3453,6 +3482,76 @@ impl PredinexContract {
         );
 
         Ok(refund)
+    }
+
+    pub fn refund_expired_pool(env: Env, pool_id: u32) -> Result<(), ContractError> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
+        Self::require_not_paused(&env)?;
+
+        let mut pool = env
+            .storage()
+            .persistent()
+            .get::<_, Pool>(&DataKey::Pool(pool_id))
+            .ok_or(ContractError::PoolNotFound)?;
+
+        if pool.status != PoolStatus::Open {
+            return Err(ContractError::PoolNotOpen);
+        }
+
+        if env.ledger().timestamp() < pool.expiry + GRACE_PERIOD_SECS {
+            return Err(ContractError::PoolNotExpiredGracePeriod);
+        }
+
+        pool.status = PoolStatus::Cancelled;
+        env.storage().persistent().set(&DataKey::Pool(pool_id), &pool);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Pool(pool_id),
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+
+        let bettors = env
+            .storage()
+            .persistent()
+            .get::<_, Vec<Address>>(&DataKey::PoolBettors(pool_id))
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut total_refunded: i128 = 0;
+        let token_address = env
+            .storage()
+            .persistent()
+            .get::<_, Address>(&DataKey::Token)
+            .ok_or(ContractError::NotInitialized)?;
+        let token_client = token::Client::new(&env, &token_address);
+
+        for bettor in bettors.iter() {
+            if let Some(user_bet) = env
+                .storage()
+                .persistent()
+                .get::<_, UserBet>(&DataKey::UserBet(pool_id, bettor.clone()))
+            {
+                let refund = user_bet.total_bet;
+                if refund > 0 {
+                    token_client.transfer(&env.current_contract_address(), &bettor, &refund);
+                    total_refunded = total_refunded.checked_add(refund).unwrap_or(total_refunded);
+                }
+                env.storage()
+                    .persistent()
+                    .remove(&DataKey::UserBet(pool_id, bettor.clone()));
+                env.storage()
+                    .persistent()
+                    .remove(&DataKey::UserOutcomeBets(pool_id, bettor.clone()));
+            }
+        }
+
+        env.events().publish(
+            (Symbol::new(&env, "refund_expired_pool"), event_version(&env), pool_id),
+            PoolRefundedEvent { total_refunded },
+        );
+
+        Ok(())
     }
 
     /// Claim winnings from a settled pool.
