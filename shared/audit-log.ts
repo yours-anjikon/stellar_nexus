@@ -5,8 +5,9 @@
 
 import { appendFileSync, existsSync, mkdirSync, statSync, unlinkSync, renameSync, readFileSync } from "fs";
 import { Router, Request, Response } from "express";
+import { fileURLToPath } from "url";
 
-const DATA_DIR = new URL("../data", import.meta.url).pathname;
+const DATA_DIR = process.env.DATA_DIR || fileURLToPath(new URL("../data", import.meta.url));
 const AUDIT_FILE = `${DATA_DIR}/audit.log.jsonl`;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_ARCHIVES = 12;

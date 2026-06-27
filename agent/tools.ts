@@ -27,6 +27,7 @@
  */
 
 import 'dotenv/config';
+import { fileURLToPath } from 'url';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { z } from 'zod';
 import { logger } from '../shared/logger.ts';
@@ -320,7 +321,7 @@ export function getMppClient(): MppClientInstance {
 }
 
 // --- Per-recipient data directories (Issue #261) ---
-const DATA_DIR = new URL('../data', import.meta.url).pathname;
+const DATA_DIR = process.env.DATA_DIR || fileURLToPath(new URL('../data', import.meta.url));
 
 let currentRecipientId = 'rosa';
 
@@ -713,6 +714,19 @@ function savePolicy(policy: SpendingPolicy, recipientId?: string) {
 }
 
 function assertValidSpendingPolicy(policy: SpendingPolicy) {
+  const fields = ["dailyLimit", "monthlyLimit", "medicationMonthlyBudget", "billMonthlyBudget", "approvalThreshold"] as const;
+  for (const f of fields) {
+    const v = policy[f];
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) {
+      throw new Error(`Invalid spending policy: ${f} must be a positive finite number`);
+    }
+  }
+  if (policy.dailyLimit > policy.monthlyLimit) {
+    throw new Error('Invalid spending policy: dailyLimit cannot exceed monthlyLimit');
+  }
+  if (policy.approvalThreshold > policy.dailyLimit) {
+    throw new Error('Invalid spending policy: approvalThreshold cannot exceed dailyLimit');
+  }
   if (
     policy.medicationMonthlyBudget + policy.billMonthlyBudget >
     policy.monthlyLimit
