@@ -6133,7 +6133,10 @@ impl PredinexContract {
                 .checked_add(normalized)
                 .ok_or(ContractError::PoolTotalOverflow)?;
         }
-        pool.participant_count += 1;
+        let is_first_bet = user_bet.total_bet == 0;
+            if is_first_bet {
+             pool.participant_count += 1;
+        }
         pool.cumulative_volume = pool
             .cumulative_volume
             .checked_add(normalized)
