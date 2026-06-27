@@ -2,12 +2,66 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import { env } from "./config/env.js";
-import { pool } from "./db.js";
+import { pool, validateSession, touchSession } from "./db.js";
+
+// ── SOC 2 CC6.3 — Formal RBAC access matrix ──────────────────────────────────
+// Documents the least-privilege role assignments enforced per route group.
+// Enforcement is via authMiddleware (authentication) and per-route requireRole /
+// requireLicenseVerified checks (authorization). This constant is the authoritative
+// source of truth for auditors; keep it in sync with route definitions.
+export const ROLE_PERMISSIONS = {
+  importer: [
+    "POST /importers",
+    "GET /importers/own",
+    "GET /importers/:id (own)",
+    "GET /importers/:id/collateral-status (own)",
+    "POST /importers/:id/upload-tariff-csv (own)",
+    "POST /importers/:id/deposit (own, KYC-gated)",
+    "POST /importers/:id/auto-top-up (own)",
+    "POST /importers/:id/withdraw (own)",
+    "GET /importers/:id/kyc (own)",
+    "POST /importers/:id/kyc (own)",
+    "POST /account/erasure-request",
+    "GET /account/erasure-request/:id",
+    "GET /privacy-policy-history",
+    "POST /account/accept-privacy-policy",
+  ],
+  surety_admin: [
+    "GET /importers/* (all)",
+    "GET /importers/:id (all)",
+    "POST /importers/:id/accrue-yield (license-verified)",
+    "POST /importers/:id/clawback (license-verified)",
+    "GET /importers/:id/kyc/:docId/review",
+    "GET /admin/oracle-alerts",
+    "PATCH /admin/oracle-alerts/:id/acknowledge",
+    "GET /admin/roles",
+    "POST /admin/privacy-policy/publish",
+    "GET /admin/access-review",
+    "GET /compliance/dashboard",
+    "GET /compliance/flags",
+    "POST /compliance/flags/:id/resolve",
+    "GET /compliance/reports",
+    "GET /compliance/reports/:id/download",
+    "POST /bonds/:id/send-for-signature",
+    "GET /bonds/:id/signature-status",
+    "POST /bonds/:id/send-reminder",
+    "POST /surety-license/submit",
+    "GET /surety-license/status",
+  ],
+  admin: ["ALL — reserved for platform operator via direct DB or Stellar keypair operations"],
+} as const;
+
+// Concurrent session limits per role (SOC 2 CC6.1)
+export const MAX_SESSIONS: Record<"importer" | "surety_admin", number> = {
+  importer: 5,
+  surety_admin: 3,
+};
 
 export interface AuthPayload {
   id: string;
   email: string;
   role: "importer" | "surety_admin";
+  sessionId?: string;
 }
 
 export interface AuthedRequest extends Request {
@@ -32,13 +86,31 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     res.status(401).json({ error: "missing bearer token" });
     return;
   }
+  let payload: AuthPayload;
   try {
-    const payload = jwt.verify(header.slice(7), env.JWT_SECRET) as AuthPayload;
-    (req as AuthedRequest).user = payload;
-    next();
+    payload = jwt.verify(header.slice(7), env.JWT_SECRET) as AuthPayload;
   } catch {
     res.status(401).json({ error: "invalid token" });
+    return;
   }
+  (req as AuthedRequest).user = payload;
+
+  // SOC 2 CC6.1: validate server-side session (15-min inactivity timeout).
+  // Tokens issued before session management was introduced have no sessionId —
+  // those are accepted as-is until they expire naturally (7-day JWT TTL).
+  if (payload.sessionId) {
+    validateSession(payload.sessionId).then((valid) => {
+      if (!valid) {
+        res.status(401).json({ error: "session expired or not found" });
+        return;
+      }
+      touchSession(payload.sessionId!);
+      next();
+    }).catch(() => next()); // fail-open if DB unreachable
+    return;
+  }
+
+  next();
 }
 
 export function requireRole(role: AuthPayload["role"]) {

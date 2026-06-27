@@ -1,7 +1,16 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { pool, recordAuthenticationAttempt, getFailedAuthAttempts, recordSecurityIncident } from "../db.js";
-import { hashPassword, verifyPassword, signToken, authMiddleware, type AuthedRequest } from "../auth.js";
+import {
+  pool,
+  recordAuthenticationAttempt,
+  getFailedAuthAttempts,
+  recordSecurityIncident,
+  createSession,
+  getActiveSessionCount,
+  revokeOldestSession,
+  revokeSession,
+} from "../db.js";
+import { hashPassword, verifyPassword, signToken, authMiddleware, MAX_SESSIONS, type AuthedRequest } from "../auth.js";
 import { env } from "../config/env.js";
 
 export const authRouter = Router();
@@ -117,10 +126,29 @@ authRouter.post("/login", async (req: Request, res: Response) => {
   }
 
   await recordAuthenticationAttempt(email, true, u.id, ipAddress, userAgent);
+
+  // SOC 2 CC6.1: enforce concurrent session limit before issuing a new session.
+  const sessionLimit = MAX_SESSIONS[u.role as keyof typeof MAX_SESSIONS] ?? 5;
+  const activeSessions = await getActiveSessionCount(u.id);
+  if (activeSessions >= sessionLimit) {
+    await revokeOldestSession(u.id);
+  }
+
+  const sessionId = await createSession(u.id, ipAddress, userAgent);
+  const token = signToken({ id: u.id, email: u.email, role: u.role, sessionId });
+
   res.json({
-    token: signToken({ id: u.id, email: u.email, role: u.role }),
+    token,
     user: { id: u.id, email: u.email, role: u.role },
   });
+});
+
+authRouter.post("/logout", authMiddleware, async (req: Request, res: Response) => {
+  const { sessionId } = (req as AuthedRequest).user;
+  if (sessionId) {
+    await revokeSession(sessionId);
+  }
+  res.json({ message: "logged out" });
 });
 
 authRouter.get("/me", authMiddleware, (req: Request, res: Response) => {
