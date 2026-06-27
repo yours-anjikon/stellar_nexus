@@ -21,3 +21,14 @@ export const NETWORK_CONFIG = {
 } as const;
 
 export type NetworkType = keyof typeof NETWORK_CONFIG;
+
+/**
+ * Returns the NETWORK_CONFIG entry for the currently active network.
+ * Reads NEXT_PUBLIC_NETWORK at runtime so the same build works on both
+ * testnet and mainnet without code changes.  Falls back to DEFAULT_NETWORK
+ * when the variable is absent or holds an unrecognised value.
+ */
+export function getNetworkConfig() {
+  const key = (process.env.NEXT_PUBLIC_NETWORK ?? DEFAULT_NETWORK) as NetworkType;
+  return NETWORK_CONFIG[key] ?? NETWORK_CONFIG[DEFAULT_NETWORK];
+}
