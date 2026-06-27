@@ -3621,6 +3621,20 @@ impl PredinexContract {
         }
         Self::require_not_paused(&env)?;
 
+        // #646 — Multi-asset pools hold user stakes in various alternative
+        // tokens (PoolTokenDeposit entries), not the base token.  Refunding
+        // via DataKey::Token would drain the wrong balance and leave alt-token
+        // funds permanently locked.  Callers must use the multi-asset refund
+        // path instead.
+        if env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::PoolIsMultiAsset(pool_id))
+            .unwrap_or(false)
+        {
+            return Err(ContractError::MultiAssetClaimRequired);
+        }
+
         let mut pool = env
             .storage()
             .persistent()
