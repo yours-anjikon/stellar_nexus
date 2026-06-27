@@ -1,7 +1,9 @@
 #![no_std]
 // The soroban contractimpl/contractclient macros generate functions that exceed
 // clippy's default argument limit. Allow this for macro-generated code only.
+// TODO(#XXX): Migrate to #[contractevent] instead of deprecated Events::publish
 #![allow(clippy::too_many_arguments)]
+#![allow(deprecated)]
 extern crate alloc;
 use alloc::vec;
 use soroban_sdk::{
@@ -368,6 +370,10 @@ pub enum ContractError {
     DeadlineInPast = 64,
     /// Creator deposit is below the minimum required at pool creation.
     InsufficientCreatorDeposit = 65,
+    /// #634 — Outcome count exceeds the hard upper bound.
+    TooManyOutcomes = 66,
+    /// A duplicate token was provided in the allowed-token list.
+    DuplicateToken = 67,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -4634,60 +4640,6 @@ impl PredinexContract {
     }
 
     /// #633 — Rescue stuck or accidentally-sent tokens from the contract.
-    ///
-    /// Transfers `amount` of any `token` held by the contract to the treasury
-    /// recipient. Intended for recovering tokens that were sent to the contract
-    /// address by mistake, or any token other than the primary betting token
-    /// that has accumulated in the contract.
-    ///
-    /// Only the treasury recipient can call this. Every successful rescue emits
-    /// a `tokens_rescued` event so off-chain indexers and monitoring tools can
-    /// detect and audit all rescue operations.
-    ///
-    /// # Arguments
-    /// * `caller` — must be the treasury recipient
-    /// * `token`  — the token contract address to rescue
-    /// * `amount` — number of stroops (raw token units) to transfer; must be > 0
-    pub fn rescue_tokens(
-        env: Env,
-        caller: Address,
-        token: Address,
-        amount: i128,
-    ) -> Result<(), ContractError> {
-        caller.require_auth();
-
-        let treasury_recipient: Address = env
-            .storage()
-            .persistent()
-            .get(&DataKey::TreasuryRecipient)
-            .ok_or(ContractError::NotInitialized)?;
-
-        if caller != treasury_recipient {
-            return Err(ContractError::Unauthorized);
-        }
-
-        if amount <= 0 {
-            return Err(ContractError::InvalidWithdrawalAmount);
-        }
-
-        let token_client = token::Client::new(&env, &token);
-        token_client.transfer(
-            &env.current_contract_address(),
-            &treasury_recipient,
-            &amount,
-        );
-
-        env.events().publish(
-            (
-                Symbol::new(&env, "tokens_rescued"),
-                event_version(&env),
-                token,
-                amount,
-            ),
-            caller,
-        );
-        Ok(())
-    }
 
     /// Set (or replace) the freeze admin address. Only callable by the treasury recipient.
     pub fn set_freeze_admin(
@@ -6152,10 +6104,7 @@ impl PredinexContract {
             env.ledger().timestamp(),
             PoolStatus::Open,
             DEFAULT_TWAP_PERIOD_SECS,
-        )?;
-
-        env.storage()
-            .persistent()
+            None,        )?;        env.storage()            .persistent()
             .set(&DataKey::PoolAllowedTokens(pool_id), &allowed_tokens);
         env.storage().persistent().extend_ttl(
             &DataKey::PoolAllowedTokens(pool_id),
@@ -6206,6 +6155,7 @@ impl PredinexContract {
             return Err(ContractError::PoolNotFound);
         }
 
+            None,
         if min_bet > 0 {
             env.storage()
                 .persistent()
@@ -6496,15 +6446,6 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .set(&DataKey::PoolOutcomeTotals(pool_id), &totals);
-        env.storage().persistent().extend_ttl(
-            &DataKey::PoolOutcomeTotals(pool_id),
-            POOL_BUMP_THRESHOLD,
-            POOL_BUMP_TARGET,
-        );
-
-        // Update UserBet and UserOutcomeBets with normalised amount.
-        if outcome == 0 {
-            user_bet.amount_a = user_bet
                 .amount_a
                 .checked_add(normalized)
                 .ok_or(ContractError::UserBetOverflow)?;
