@@ -77,6 +77,7 @@ import {
   policyBlocksTotal,
   agentSpendingUsd,
   agentTransactionsTotal,
+  x402TxExtractionFailedTotal,
 } from '../shared/metrics.ts';
 import {
   assertMockNetworkAllowed,
@@ -155,20 +156,40 @@ async function getRecommendedFee(): Promise<string> {
   }
 }
 
-// Helper: extract real Stellar tx hash from x402 PAYMENT-RESPONSE header
-export function extractX402TxHash(response: Response): string | undefined {
+export const TX_HASH_EXTRACTION_FAILED = 'extraction_failed' as const;
+
+// Helper: extract real Stellar tx hash from x402 PAYMENT-RESPONSE header.
+// Returns undefined when no header is present, TX_HASH_EXTRACTION_FAILED when
+// the header is present but all decode strategies fail (logged + counted), or
+// a 64-char hex hash on success. Callers must check for the sentinel before
+// passing the result to waitForStellarSettlement (#191).
+export function extractX402TxHash(
+  response: Response,
+): string | typeof TX_HASH_EXTRACTION_FAILED | undefined {
   const header =
     response.headers.get('PAYMENT-RESPONSE') ||
     response.headers.get('payment-response') ||
     response.headers.get('X-PAYMENT-RESPONSE');
   if (!header) return undefined;
+
+  // Strategy 1: decode the structured payment-response header
   try {
     const decoded = decodePaymentResponseHeader(header);
-    return decoded.transaction || undefined;
+    if (decoded.transaction) return decoded.transaction;
   } catch {
-    // If decode fails, the header itself might be a raw hash
-    return header.length === 64 ? header : undefined;
+    // fall through to strategy 2
   }
+
+  // Strategy 2: the header itself might be a raw 64-char hex hash
+  if (STELLAR_TX_HASH_RE.test(header)) return header;
+
+  // All strategies failed — log full header for debugging and count the event
+  logger.warn(
+    { paymentResponseHeader: header.slice(0, 500) },
+    '[x402] extractX402TxHash: all extraction strategies failed; hash unverifiable on-chain',
+  );
+  x402TxExtractionFailedTotal.inc();
+  return TX_HASH_EXTRACTION_FAILED;
 }
 
 // Helper: submitTransaction with timeout and retry
@@ -737,6 +758,7 @@ function recordServiceFee(
   description: string,
   recipient: string,
   stellarTxHash?: string,
+  txHashStatus?: 'extracted' | 'extraction_failed',
 ) {
   x402SettlementsTotal.inc();
   spendingTracker.serviceFees += amount;
@@ -748,7 +770,8 @@ function recordServiceFee(
     amount,
     recipient,
     stellarTxHash,
-    status: 'completed' as const,
+    txHashStatus,
+    status: 'completed',
     category: TRANSACTION_CATEGORY.SERVICE_FEES,
   };
   spendingTracker.transactions.push(tx);
@@ -940,7 +963,11 @@ export async function comparePharmacyPrices(
   const data = await response.json();
 
   // Extract real Stellar tx hash from x402 payment response header
-  const txHash = extractX402TxHash(response);
+  const txHashResult = extractX402TxHash(response);
+  const txHash = txHashResult === TX_HASH_EXTRACTION_FAILED ? undefined : txHashResult;
+  const txHashStatus = txHashResult === TX_HASH_EXTRACTION_FAILED
+    ? 'extraction_failed' as const
+    : txHash ? 'extracted' as const : undefined;
 
   // Wait for on-chain settlement before recording the fee
   if (txHash) {
@@ -957,6 +984,7 @@ export async function comparePharmacyPrices(
     `x402 query: pharmacy prices for ${drugName}`,
     data.protocol?.payTo || 'pharmacy-price-api',
     txHash,
+    txHashStatus,
   );
 
   return data;
@@ -1134,7 +1162,11 @@ export async function auditBill(
 
   const data = await response.json();
 
-  const txHash = extractX402TxHash(response);
+  const txHashResult = extractX402TxHash(response);
+  const txHash = txHashResult === TX_HASH_EXTRACTION_FAILED ? undefined : txHashResult;
+  const txHashStatus = txHashResult === TX_HASH_EXTRACTION_FAILED
+    ? 'extraction_failed' as const
+    : txHash ? 'extracted' as const : undefined;
 
   // Wait for on-chain settlement before recording the fee
   if (txHash) {
@@ -1151,6 +1183,7 @@ export async function auditBill(
     'x402 query: medical bill audit',
     data.protocol?.payTo || 'bill-audit-api',
     txHash,
+    txHashStatus,
   );
 
   return data;
@@ -1215,7 +1248,11 @@ export async function checkDrugInteractions(medications: string[]) {
 
   const data = await response.json();
 
-  const txHash = extractX402TxHash(response);
+  const txHashResult = extractX402TxHash(response);
+  const txHash = txHashResult === TX_HASH_EXTRACTION_FAILED ? undefined : txHashResult;
+  const txHashStatus = txHashResult === TX_HASH_EXTRACTION_FAILED
+    ? 'extraction_failed' as const
+    : txHash ? 'extracted' as const : undefined;
 
   // Wait for on-chain settlement before recording the fee
   if (txHash) {
@@ -1232,6 +1269,7 @@ export async function checkDrugInteractions(medications: string[]) {
     `x402 query: drug interactions for ${medications.join(', ')}`,
     data.protocol?.payTo || 'drug-interaction-api',
     txHash,
+    txHashStatus,
   );
 
   return data;
