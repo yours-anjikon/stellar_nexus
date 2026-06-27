@@ -2877,6 +2877,18 @@ impl PredinexContract {
         user.require_auth();
         Self::require_not_paused(&env)?;
 
+        // #645 — Multi-asset pools track per-token stakes; the base-token
+        // refund path here is incorrect for alt-token bets.  Callers must use
+        // `cancel_multi_asset_bet` (or the equivalent multi-asset flow) instead.
+        if env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::PoolIsMultiAsset(pool_id))
+            .unwrap_or(false)
+        {
+            return Err(ContractError::MultiAssetClaimRequired);
+        }
+
         if amount <= 0 {
             return Err(ContractError::InvalidBetAmount);
         }
