@@ -1,9 +1,9 @@
 'use client';
 
-import Navbar from '../components/Navbar';
+import Navbar from '@/components/Navbar';
 import RouteErrorBoundary from '../../components/RouteErrorBoundary';
 import Leaderboard from '../../components/Leaderboard';
-import { useWallet } from '../components/WalletAdapterProvider';
+import { useWallet } from '@/components/WalletAdapterProvider';
 
 function LeaderboardContent() {
   const { address } = useWallet();

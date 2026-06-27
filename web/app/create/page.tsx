@@ -4,14 +4,14 @@ const log = createScopedLogger('page');
 
 import { FormEvent, useState } from 'react';
 import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
-import Navbar from '../components/Navbar';
-import AuthGuard from '../components/AuthGuard';
-import { useWallet } from '../components/WalletAdapterProvider';
+import Navbar from '@/components/Navbar';
+import AuthGuard from '@/components/AuthGuard';
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { useToast } from '../../providers/ToastProvider';
 import { predinexContract } from '../lib/adapters/predinex-contract';
 import { invalidateOnCreatePool } from '../lib/cache-invalidation';
 import { TxStage } from '../lib/soroban-transaction-service';
-import { TransactionFeeModal } from '../components/TransactionFeeModal';
+import { TransactionFeeModal } from '@/components/TransactionFeeModal';
 import { useCreateWizard, type WizardStep } from './_wizard/useCreateWizard';
 import { StepIndicator } from './_wizard/StepIndicator';
 import { StepQuestion } from './_wizard/StepQuestion';

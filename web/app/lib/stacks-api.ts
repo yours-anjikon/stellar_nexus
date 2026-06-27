@@ -11,6 +11,8 @@
  */
 import { STACKS_MAINNET, STACKS_TESTNET, StacksNetwork } from "@stacks/network";
 import { fetchCallReadOnlyFunction, cvToValue, uintCV, principalCV, ClarityValue } from "@stacks/transactions";
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('stacks-api');
 import { getRuntimeConfig } from "./runtime-config";
 import { getPoolCountFromSoroban, getPoolsBatchFromSoroban } from "./soroban-read-api";
 
@@ -62,7 +64,7 @@ export async function getPoolCount(): Promise<number> {
         const result = await fetchCallReadOnlyFunction({
             contractAddress: cfg.contract.address,
             contractName: cfg.contract.name,
-            functionName: 'get-pool-count',
+            functionName: 'get_pool_count',
             functionArgs: [],
             senderAddress: cfg.contract.address,
             network,
@@ -90,7 +92,7 @@ export async function getPool(poolId: number): Promise<Pool | null> {
         const result = await fetchCallReadOnlyFunction({
             contractAddress: cfg.contract.address,
             contractName: cfg.contract.name,
-            functionName: 'get-pool',
+            functionName: 'get_pool',
             functionArgs: [uintCV(poolId)],
             senderAddress: cfg.contract.address,
             network,
@@ -138,7 +140,7 @@ export async function getPool(poolId: number): Promise<Pool | null> {
  */
 export async function getMarkets(filter: 'active' | 'settled' | 'all' = 'all'): Promise<Pool[]> {
     const count = await getPoolCountFromSoroban();
-    if (count <= 1) return [];
+    if (count === 0) return [];
 
     const rawPools = await getPoolsBatchFromSoroban(1, count);
     const pools: Pool[] = [];
@@ -221,7 +223,7 @@ export async function getUserBet(poolId: number, userAddress: string): Promise<U
         const result = await fetchCallReadOnlyFunction({
             contractAddress: cfg.contract.address,
             contractName: cfg.contract.name,
-            functionName: 'get-user-bet',
+            functionName: 'get_user_bet',
             functionArgs: [uintCV(poolId), principalCV(userAddress)],
             senderAddress: cfg.contract.address,
             network,
@@ -504,9 +506,9 @@ export async function getUserActivity(
             const fnName: string = callInfo?.function_name || 'unknown';
 
             let type: ActivityItem['type'] = 'contract-call';
-            if (fnName === 'place-bet') type = 'bet-placed';
-            else if (fnName === 'claim-winnings') type = 'winnings-claimed';
-            else if (fnName === 'create-pool') type = 'pool-created';
+            if (fnName === 'place_bet') type = 'bet-placed';
+            else if (fnName === 'claim_winnings') type = 'winnings-claimed';
+            else if (fnName === 'create_pool') type = 'pool-created';
 
             let status: ActivityItem['status'] = 'pending';
             if (tx.tx_status === 'success') status = 'success';

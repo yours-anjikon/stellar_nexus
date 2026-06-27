@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
-import { NetworkMismatchWarning } from '../../app/components/NetworkMismatchWarning';
+import { NetworkMismatchWarning } from '@/components/NetworkMismatchWarning';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 

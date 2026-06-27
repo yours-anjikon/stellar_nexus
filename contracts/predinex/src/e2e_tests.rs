@@ -74,6 +74,7 @@ fn test_e2e_successful_lifecycle() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     let pool = t.client.get_pool(&pool_id).expect("pool must exist");
@@ -140,6 +141,7 @@ fn test_e2e_void_and_refund() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     // Step 2: Bet
@@ -184,6 +186,7 @@ fn test_e2e_dispute_unfreeze_claim() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
     t.client.place_bet(&user_a, &pool_id, &0u32, &500i128, &None::<Address>);
     t.client.place_bet(&user_b, &pool_id, &1u32, &500i128, &None::<Address>);
@@ -267,6 +270,7 @@ fn test_e2e_zero_activity_pool_cannot_settle() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     // Advance past expiry so the time-check passes before the participant check.
@@ -304,6 +308,7 @@ fn test_e2e_expired_unsettled_refund() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     // Place bets — pool is live.
@@ -348,6 +353,7 @@ fn test_e2e_min_bet_enforcement() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     // Set minimum bet to 1_000 (max = 0 means no upper limit).
@@ -377,6 +383,7 @@ fn test_e2e_max_bet_enforcement() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     // Set maximum bet to 500 (min = 0 means no lower limit).
@@ -428,6 +435,7 @@ fn test_e2e_multiple_bettors_proportional_distribution() {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3600,
+        &MIN_CREATOR_DEPOSIT,
     );
 
     t.client.place_bet(&w1, &pool_id, &0u32, &100i128, &None::<Address>);

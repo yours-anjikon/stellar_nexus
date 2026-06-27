@@ -1,7 +1,7 @@
 'use client';
 
 import { RefreshCw, AlertCircle, Search } from 'lucide-react';
-import MarketCard from './MarketCard';
+import MarketCard from '@/components/MarketCard';
 import { ProcessedMarket } from '@/app/lib/market-types';
 import Link from 'next/link';
 

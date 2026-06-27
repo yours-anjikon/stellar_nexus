@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '../WalletAdapterProvider';
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { Wallet, AlertCircle } from 'lucide-react';
 
 interface AuthGuardProps {

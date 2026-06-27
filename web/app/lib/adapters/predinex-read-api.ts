@@ -16,6 +16,8 @@ import {
 } from "../soroban-read-api";
 import { getUserActivityFromSoroban } from "../soroban-event-service";
 import { getMarkets, getTotalVolume, getUserActivity } from "../stacks-api";
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('predinexReadApi');
 import type { ActivityItem } from "./types";
 
 /**

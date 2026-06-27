@@ -59,6 +59,7 @@ fn make_pool_mu(t: &MultiUserEnv) -> u32 {
         &String::from_str(&t.env, "Yes"),
         &String::from_str(&t.env, "No"),
         &3_600u64,
+        &MIN_CREATOR_DEPOSIT,
     )
 }
 

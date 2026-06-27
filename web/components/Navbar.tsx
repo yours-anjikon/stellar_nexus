@@ -4,12 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Menu, X, Wallet, Moon, Sun, Radio, Home, Zap, Settings } from "lucide-react";
-import { useWallet } from './WalletAdapterProvider';
-import { useTheme } from '../../lib/theme';
-import { useI18n } from '../lib/i18n';
-import { ICON_CLASS } from "../lib/constants";
-import { WalletAddressCopyButton } from "../../components/WalletAddressCopyButton";
-import { NetworkMismatchWarning } from './NetworkMismatchWarning';
+import { useWallet } from '@/components/WalletAdapterProvider';
+import { useTheme } from '@/lib/theme';
+import { useI18n } from '@/app/lib/i18n';
+import { ICON_CLASS } from "@/app/lib/constants";
+import { WalletAddressCopyButton } from '@/components/WalletAddressCopyButton';
+import { NetworkMismatchWarning } from '@/components/NetworkMismatchWarning';
 import { useNetworkMismatch } from '@/lib/hooks/useNetworkMismatch';
 
 export default function Navbar() {

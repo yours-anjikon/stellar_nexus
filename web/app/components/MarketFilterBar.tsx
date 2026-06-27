@@ -1,7 +1,7 @@
 'use client';
 
 import { RotateCcw, SlidersHorizontal } from 'lucide-react';
-import SearchBar from './SearchBar';
+import SearchBar from '@/components/SearchBar';
 import FilterPresets from './FilterPresets';
 import type { FilterPreset } from '../lib/hooks/useFilterPresets';
 import type { MarketFilters, MarketStatusFilter, SortOption, TimeRangeFilter } from '../lib/market-types';

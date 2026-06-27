@@ -8,6 +8,8 @@
  */
 
 import { redactSensitiveData } from '../error-reporter';
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('AnalyticsService');
 import type {
   AnalyticsEvent,
   EventName,
@@ -111,7 +113,7 @@ class AnalyticsService {
 
     // Debug logging in development
     if (this.config.debug) {
-      log.info('[analytics]', event, payload.properties);
+      log.info(`[analytics] ${event}`, payload.properties);
     }
 
     // Skip emission if disabled

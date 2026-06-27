@@ -7,6 +7,7 @@ import { UserBet, BetHistory, UserPortfolio, MarketStatistics, PlatformMetrics }
 import { PoolData } from './market-types';
 import { getCurrentBlockHeight } from './market-utils';
 import { formatNumberCompact, formatPercentage, TOKEN_SYMBOL } from '@/lib/formatting';
+export { formatPercentage };
 
 /**
  * Calculates a consolidated user portfolio from a list of user bets.

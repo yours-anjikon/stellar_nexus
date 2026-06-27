@@ -6,7 +6,7 @@ import {
   formatCountdown,
   formatCountdownAccessible,
   isUrgent,
-} from '../lib/countdown-utils';
+} from '@/app/lib/countdown-utils';
 
 interface CountdownTimerProps {
   /** Estimated seconds until expiry, or `null` when already expired/unknown. */

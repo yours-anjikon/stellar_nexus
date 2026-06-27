@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react';
-import { createFreighterAdapter, FreighterWalletClient } from '../lib/freighter-adapter';
+import { createFreighterAdapter, FreighterWalletClient } from '@/app/lib/freighter-adapter';
 
 const WalletContext = createContext<FreighterWalletClient | undefined>(undefined);
 

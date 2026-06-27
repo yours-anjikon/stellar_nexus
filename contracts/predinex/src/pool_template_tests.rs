@@ -10,6 +10,7 @@
 
 #![cfg(test)]
 extern crate std;
+use std::format;
 
 use super::*;
 use soroban_sdk::{

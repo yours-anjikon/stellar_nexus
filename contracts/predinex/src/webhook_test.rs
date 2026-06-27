@@ -17,6 +17,7 @@
 
 #![cfg(test)]
 extern crate std;
+use std::format;
 
 use super::*;
 use soroban_sdk::{
@@ -208,7 +209,7 @@ fn test_register_webhook_enforces_max_10_limit() {
 
     // Register exactly 10 webhooks — all should succeed.
     for i in 0u32..10 {
-        let url = std::format!("https://hook{}.example.com/wh", i);
+        let url = format!("https://hook{}.example.com/wh", i);
         ctx.client
             .register_webhook(&ctx.admin, &String::from_str(&ctx.env, &url), &et);
     }
@@ -232,7 +233,7 @@ fn test_register_webhook_update_existing_does_not_count_toward_cap() {
 
     // Fill to 10.
     for i in 0u32..10 {
-        let url = std::format!("https://hook{}.example.com/wh", i);
+        let url = format!("https://hook{}.example.com/wh", i);
         ctx.client
             .register_webhook(&ctx.admin, &String::from_str(&ctx.env, &url), &et);
     }

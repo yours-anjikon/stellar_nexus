@@ -4,10 +4,10 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CreateMarket from '../../app/create/page';
 import { predinexContract } from '../../app/lib/adapters/predinex-contract';
-import * as WalletAdapterProvider from '../../app/components/WalletAdapterProvider';
+import * as WalletAdapterProvider from '@/components/WalletAdapterProvider';
 import { renderWithProviders } from '../helpers/renderWithProviders';
 
-vi.mock('../../app/components/WalletAdapterProvider', () => ({
+vi.mock('@/components/WalletAdapterProvider', () => ({
   useWallet: vi.fn(),
   WalletAdapterProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -22,11 +22,11 @@ vi.mock('../../app/lib/cache-invalidation', () => ({
   invalidateOnCreatePool: vi.fn(),
 }));
 
-vi.mock('../../app/components/Navbar', () => ({
+vi.mock('@/components/Navbar', () => ({
   default: () => <nav data-testid="navbar" />,
 }));
 
-vi.mock('../../app/components/AuthGuard', () => ({
+vi.mock('@/components/AuthGuard', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 

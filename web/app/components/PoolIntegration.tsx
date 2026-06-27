@@ -4,7 +4,7 @@ const log = createScopedLogger('PoolIntegration');
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWallet } from './WalletAdapterProvider';
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { useNetworkMismatch } from '@/lib/hooks/useNetworkMismatch';
 import { Loader2, AlertCircle, CheckCircle, TrendingUp, Users, RefreshCw } from 'lucide-react';
 import { formatDisplayAddress } from '../lib/address-display';

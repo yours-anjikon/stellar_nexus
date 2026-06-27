@@ -13,7 +13,7 @@
 import { AppConfig, UserData, UserSession } from '@stacks/connect';
 import { ReactNode, createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { connectWallet, WalletType } from '../lib/wallet-connector';
-import WalletModal from './WalletModal';
+import WalletModal from '@/components/WalletModal';
 import { createScopedLogger } from '../lib/logger';
 
 const log = createScopedLogger('WalletProvider');

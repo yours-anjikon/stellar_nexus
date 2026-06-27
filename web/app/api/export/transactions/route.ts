@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveExportWindow, filterActivitiesForExport } from '../../lib/activity-export';
-import type { ActivityItem } from '../../lib/stacks-api';
+import { resolveExportWindow, filterActivitiesForExport } from '@/app/lib/activity-export';
+import type { ActivityItem } from '@/app/lib/stacks-api';
 
 export const runtime = 'nodejs';
 
@@ -50,7 +50,7 @@ function getMockActivities(address: string): ActivityItem[] {
     { txId: 'tx1', type: 'bet-placed', functionName: 'Yes', timestamp: now - 86400, status: 'success', amount: 1_000_000, poolId: 1, poolTitle: 'Will BTC hit $100k?', explorerUrl: '' },
     { txId: 'tx2', type: 'winnings-claimed', functionName: 'Yes', timestamp: now - 43200, status: 'success', amount: 1_900_000, poolId: 1, poolTitle: 'Will BTC hit $100k?', explorerUrl: '' },
     { txId: 'tx3', type: 'bet-placed', functionName: 'No', timestamp: now - 3600, status: 'success', amount: 500_000, poolId: 2, poolTitle: 'ETH merge success?', explorerUrl: '' },
-  ].map((a) => ({ ...a, address }));
+  ].map((a) => ({ ...a, address }) as ActivityItem);
 }
 
 export async function GET(req: NextRequest) {

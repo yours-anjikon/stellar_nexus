@@ -1000,7 +1000,7 @@
               },
               "durability": "persistent",
               "val": {
-                "u32": 6
+                "u32": 5
               }
             }
           },

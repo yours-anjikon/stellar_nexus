@@ -8,7 +8,7 @@ import { blocksToSeconds } from '@/app/lib/countdown-utils';
 import { formatDisplayAddress } from '@/app/lib/address-display';
 import { usePoolFavorites } from '@/app/lib/hooks/usePoolFavorites';
 import { usePoolComparison, POOL_COMPARISON_MAX } from '@/app/lib/hooks/usePoolComparison';
-import CountdownTimer from '@/app/components/CountdownTimer';
+import CountdownTimer from '@/components/CountdownTimer';
 
 interface MarketCardProps {
   market: ProcessedMarket;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { BarChart2 } from 'lucide-react';
-import { usePoolComparison, POOL_COMPARISON_MAX } from '../lib/hooks/usePoolComparison';
+import { usePoolComparison, POOL_COMPARISON_MAX } from '@/app/lib/hooks/usePoolComparison';
 
 export default function CompareBadge() {
   const { count } = usePoolComparison();

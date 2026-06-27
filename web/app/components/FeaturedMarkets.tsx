@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import MarketGrid from '../../components/MarketGrid';
+import MarketGrid from '@/components/MarketGrid';
 import { useMarketDiscovery } from '../lib/hooks/useMarketDiscovery';
 
 const FEATURED_MARKET_COUNT = 3;

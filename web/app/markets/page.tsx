@@ -2,17 +2,17 @@
 
 import { Suspense, useCallback, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import Navbar from "../components/Navbar";
+import Navbar from '@/components/Navbar';
 import { StatsCard } from '@/components/ui/StatsCard';
 import MarketFilterBar from "../components/MarketFilterBar";
-import MarketGrid from "@/components/MarketGrid";
-import Pagination from "@/components/Pagination";
+import MarketGrid from '@/components/MarketGrid';
+import Pagination from '@/components/Pagination';
 import { marketFiltersToParams, parseMarketFiltersFromParams } from "../lib/market-filtering";
 import type { MarketFilters } from "../lib/market-types";
 import { useMarketDiscovery } from "../lib/hooks/useMarketDiscovery";
 import { useFilterPresets } from "../lib/hooks/useFilterPresets";
 import RouteErrorBoundary from "../../components/RouteErrorBoundary";
-import CompareBadge from "../components/CompareBadge";
+import CompareBadge from '@/components/CompareBadge';
 
 function MarketsContent() {
   const router = useRouter();

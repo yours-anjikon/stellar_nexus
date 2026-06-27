@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Bell, X } from 'lucide-react';
-import { useWalletConnect } from '../lib/hooks/useWalletConnect';
-import { useNotificationPreferences } from '../lib/hooks/useNotificationPreferences';
+import { useWalletConnect } from '@/app/lib/hooks/useWalletConnect';
+import { useNotificationPreferences } from '@/app/lib/hooks/useNotificationPreferences';
 import {
   markPushPermissionPromptShown,
   shouldShowFirstVisitPushPrompt,
   useBrowserNotifications,
-} from '../lib/notifications';
+} from '@/app/lib/notifications';
 
 export default function PushNotificationPrompt() {
   const { session } = useWalletConnect();

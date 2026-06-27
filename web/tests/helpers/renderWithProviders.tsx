@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '../../providers/ToastProvider';
 import { ThemeProvider } from '../../lib/theme';
 import { I18nProvider } from '../../app/lib/i18n';
-import { WalletAdapterProvider } from '../../app/components/WalletAdapterProvider';
+import { WalletAdapterProvider } from '@/components/WalletAdapterProvider';
 
 export interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper'> {
   withQueryClient?: boolean;

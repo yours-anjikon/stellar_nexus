@@ -4,7 +4,7 @@ const log = createScopedLogger('IncentivesDisplay');
 
 import { useState, useEffect, useCallback } from 'react';
 import { useIncentives } from '../lib/hooks/useIncentives';
-import { useWallet } from './WalletAdapterProvider';
+import { useWallet } from '@/components/WalletAdapterProvider';
 import { getStacksCoreApiBaseUrl, predinexReadApi } from '../lib/adapters/predinex-read-api';
 import { calculateTotalIncentive, DEFAULT_INCENTIVE_CONFIG, BetterIncentive } from '../lib/liquidity-incentives';
 import { TOKEN_SYMBOL } from '@/lib/formatting';
