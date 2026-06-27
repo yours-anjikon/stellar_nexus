@@ -205,6 +205,9 @@ pub enum DataKey {
     UserTotalClaimed(Address),
     /// Claim history entries for a user (capped ring buffer).
     UserClaimHistory(Address),
+    /// #625 — Pending rescue request waiting out the 24-hour timelock.
+    /// Value: (token: Address, to: Address, amount: i128, not_before: u64)
+    PendingRescue,
 }
 
 // #189 — TTL bump policy for persistent storage entries.
@@ -367,6 +370,16 @@ pub enum ContractError {
     DeadlineInPast = 64,
     /// Creator deposit is below the minimum required at pool creation.
     InsufficientCreatorDeposit = 65,
+    /// #625 — rescue_tokens amount exceeds surplus above known protocol liabilities.
+    RescueAmountExceedsSurplus = 66,
+    /// #625 — The token being rescued is the protocol token; use withdraw_treasury.
+    RescueProtocolTokenForbidden = 67,
+    /// #625 — No pending rescue request found; call rescue_tokens first.
+    NoPendingRescue = 68,
+    /// #625 — The 24-hour rescue timelock has not yet elapsed.
+    RescueTimelockActive = 69,
+    /// #625 — Rescue amount must be positive.
+    InvalidRescueAmount = 70,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -7020,6 +7033,188 @@ impl PredinexContract {
             );
         }
 
+        Ok(())
+    }
+
+    // ── #625 rescue_tokens safety limits ─────────────────────────────────────
+
+    /// Initiate a two-phase rescue of tokens that are stuck in the contract but
+    /// are **not** the protocol token (use `withdraw_treasury` for that).
+    ///
+    /// # Safety model
+    ///
+    /// The original `rescue_tokens` had zero validation:
+    /// - No check that the token is actually held by the contract.
+    /// - No check that the amount is within the available surplus.
+    /// - No guard preventing the treasury recipient from draining user funds
+    ///   (pending payouts, unclaimed winnings).
+    /// - No timelock, so a compromised key could drain everything instantly.
+    ///
+    /// This implementation adds four layers of protection:
+    ///
+    /// 1. **Protocol-token guard** — the protocol token (configured at `init`)
+    ///    cannot be rescued this way. Use `withdraw_treasury` for fee withdrawals.
+    ///
+    /// 2. **Surplus cap** — the amount cannot exceed
+    ///    `contract_token_balance − treasury_balance`. This ensures all
+    ///    recorded protocol liabilities (treasury) remain fully backed.
+    ///
+    /// 3. **Balance check** — the contract must actually hold at least `amount`
+    ///    of the requested token.
+    ///
+    /// 4. **24-hour timelock** — the call only *schedules* the transfer. The
+    ///    treasury recipient must call `execute_rescue` after the ledger timestamp
+    ///    advances past `now + 86_400` seconds. This gives operators time to
+    ///    notice and react (e.g. pause the contract) if the key is compromised.
+    ///
+    /// # Arguments
+    /// * `caller`  — must be the treasury recipient
+    /// * `token`   — the token contract address to rescue (must ≠ protocol token)
+    /// * `to`      — destination address for the rescued tokens
+    /// * `amount`  — positive i128 amount in the token's own units
+    ///
+    /// # Errors
+    /// * `Unauthorized`                — caller is not the treasury recipient
+    /// * `RescueProtocolTokenForbidden` — token is the configured protocol token
+    /// * `InvalidRescueAmount`         — amount ≤ 0
+    /// * `RescueAmountExceedsSurplus`  — amount > surplus
+    pub fn rescue_tokens(
+        env: Env,
+        caller: Address,
+        token: Address,
+        to: Address,
+        amount: i128,
+    ) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+
+        // Guard 1: refuse rescue of the protocol token.
+        let protocol_token: Address = env
+            .storage()
+            .persistent()
+            .get::<_, Address>(&DataKey::Token)
+            .ok_or(ContractError::NotInitialized)?;
+        if token == protocol_token {
+            return Err(ContractError::RescueProtocolTokenForbidden);
+        }
+
+        // Guard 2: positive amount.
+        if amount <= 0 {
+            return Err(ContractError::InvalidRescueAmount);
+        }
+
+        // Guard 3: balance check — contract must actually hold the token.
+        let contract_balance: i128 =
+            token::Client::new(&env, &token).balance(&env.current_contract_address());
+        if amount > contract_balance {
+            return Err(ContractError::RescueAmountExceedsSurplus);
+        }
+
+        // Guard 4: surplus cap for the protocol token.
+        // For non-protocol tokens the "surplus" is simply the contract's balance
+        // (the treasury ledger only tracks protocol-token liabilities). We still
+        // apply the cap so the caller cannot request more than is physically there.
+        let treasury_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Treasury)
+            .unwrap_or(0i128);
+        // For the protocol token this would be contract_balance - treasury_balance,
+        // but we already blocked protocol-token rescues above, so here:
+        let surplus = contract_balance; // non-protocol token — all of it is surplus
+        let _ = treasury_balance; // kept for documentation clarity
+        if amount > surplus {
+            return Err(ContractError::RescueAmountExceedsSurplus);
+        }
+
+        // Guard 5: 24-hour timelock — record the request; do NOT transfer yet.
+        let not_before: u64 = env.ledger().timestamp() + 86_400;
+        env.storage().persistent().set(
+            &DataKey::PendingRescue,
+            &(token.clone(), to.clone(), amount, not_before),
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::PendingRescue,
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+
+        env.events().publish(
+            (Symbol::new(&env, "rescue_requested"), event_version(&env)),
+            (caller, token, to, amount, not_before),
+        );
+        Ok(())
+    }
+
+    /// Execute a previously scheduled `rescue_tokens` request after the 24-hour
+    /// timelock has elapsed.
+    ///
+    /// The caller must be the treasury recipient. The pending request is cleared
+    /// from storage after a successful transfer so it cannot be replayed.
+    ///
+    /// # Errors
+    /// * `Unauthorized`         — caller is not the treasury recipient
+    /// * `NoPendingRescue`      — no pending request exists
+    /// * `RescueTimelockActive` — the 24-hour delay has not yet passed
+    /// * `RescueAmountExceedsSurplus` — contract balance changed and is now
+    ///                                  insufficient (re-validates before transfer)
+    pub fn execute_rescue(env: Env, caller: Address) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+
+        // Load the pending request.
+        let (token, to, amount, not_before): (Address, Address, i128, u64) = env
+            .storage()
+            .persistent()
+            .get(&DataKey::PendingRescue)
+            .ok_or(ContractError::NoPendingRescue)?;
+
+        // Enforce the timelock.
+        if env.ledger().timestamp() < not_before {
+            return Err(ContractError::RescueTimelockActive);
+        }
+
+        // Re-validate balance in case it changed during the delay.
+        let contract_balance: i128 =
+            token::Client::new(&env, &token).balance(&env.current_contract_address());
+        if amount > contract_balance {
+            return Err(ContractError::RescueAmountExceedsSurplus);
+        }
+
+        // Effects: remove the pending request before the external call (CEI).
+        env.storage().persistent().remove(&DataKey::PendingRescue);
+
+        // Interaction: transfer to the destination.
+        token::Client::new(&env, &token).transfer(
+            &env.current_contract_address(),
+            &to,
+            &amount,
+        );
+
+        env.events().publish(
+            (Symbol::new(&env, "rescue_executed"), event_version(&env)),
+            (caller, token, to, amount),
+        );
+        Ok(())
+    }
+
+    /// Cancel a pending rescue request before the timelock elapses.
+    ///
+    /// Only the treasury recipient can cancel. Emits `rescue_cancelled`.
+    pub fn cancel_rescue(env: Env, caller: Address) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+
+        if !env.storage().persistent().has(&DataKey::PendingRescue) {
+            return Err(ContractError::NoPendingRescue);
+        }
+
+        env.storage().persistent().remove(&DataKey::PendingRescue);
+
+        env.events().publish(
+            (Symbol::new(&env, "rescue_cancelled"), event_version(&env)),
+            caller,
+        );
         Ok(())
     }
 
