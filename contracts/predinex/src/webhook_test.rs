@@ -26,18 +26,24 @@ use soroban_sdk::{
 };
 
 fn has_event_topic(env: &Env, events: &soroban_sdk::testutils::ContractEvents, name: &str) -> bool {
-    events.events().iter().any(|event| {
-        match &event.body {
-            soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-                if let Some(first) = v0.topics.first() {
-                    if let Ok(val) = <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(env, first) {
-                        if let Ok(sym) = <soroban_sdk::Symbol as soroban_sdk::TryFromVal<Env, Val>>::try_from_val(env, &val) {
-                            return sym == soroban_sdk::Symbol::new(env, name);
-                        }
+    events.events().iter().any(|event| match &event.body {
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
+            if let Some(first) = v0.topics.first() {
+                if let Ok(val) =
+                    <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
+                        env, first,
+                    )
+                {
+                    if let Ok(sym) =
+                        <soroban_sdk::Symbol as soroban_sdk::TryFromVal<Env, Val>>::try_from_val(
+                            env, &val,
+                        )
+                    {
+                        return sym == soroban_sdk::Symbol::new(env, name);
                     }
                 }
-                false
             }
+            false
         }
     })
 }
@@ -111,8 +117,7 @@ fn test_register_webhook_stores_and_get_webhooks_retrieves() {
     let url = ctx.url("https://example.com/webhook");
     let event_types = ctx.event_types_all();
 
-    ctx.client
-        .register_webhook(&ctx.admin, &url, &event_types);
+    ctx.client.register_webhook(&ctx.admin, &url, &event_types);
 
     let hooks = ctx.client.get_webhooks();
     assert_eq!(hooks.len(), 1);
@@ -173,12 +178,11 @@ fn test_register_webhook_rejects_ftp_url() {
 #[test]
 fn test_register_webhook_accepts_https_url_with_path_and_query() {
     let ctx = Ctx::new();
-    ctx.client
-        .register_webhook(
-            &ctx.admin,
-            &ctx.url("https://hooks.example.com/v1/predinex?token=abc123"),
-            &ctx.event_types_one(),
-        );
+    ctx.client.register_webhook(
+        &ctx.admin,
+        &ctx.url("https://hooks.example.com/v1/predinex?token=abc123"),
+        &ctx.event_types_one(),
+    );
     assert_eq!(ctx.client.get_webhooks().len(), 1);
 }
 
@@ -216,11 +220,9 @@ fn test_register_webhook_enforces_max_10_limit() {
     assert_eq!(ctx.client.get_webhooks().len(), 10);
 
     // The 11th registration must fail.
-    let result = ctx.client.try_register_webhook(
-        &ctx.admin,
-        &ctx.url("https://hook10.example.com/wh"),
-        &et,
-    );
+    let result =
+        ctx.client
+            .try_register_webhook(&ctx.admin, &ctx.url("https://hook10.example.com/wh"), &et);
     assert_eq!(result, Err(Ok(ContractError::WebhookLimitReached)));
     // Storage unchanged.
     assert_eq!(ctx.client.get_webhooks().len(), 10);
@@ -241,8 +243,7 @@ fn test_register_webhook_update_existing_does_not_count_toward_cap() {
     // Re-registering an existing URL must succeed (update, not new entry).
     let first_url = ctx.url("https://hook0.example.com/wh");
     let new_et = ctx.event_types_all();
-    ctx.client
-        .register_webhook(&ctx.admin, &first_url, &new_et);
+    ctx.client.register_webhook(&ctx.admin, &first_url, &new_et);
 
     // Still exactly 10 entries.
     let hooks = ctx.client.get_webhooks();
@@ -318,9 +319,9 @@ fn test_unregister_webhook_removes_correct_entry_among_multiple() {
 #[test]
 fn test_unregister_webhook_not_found_returns_error() {
     let ctx = Ctx::new();
-    let result =
-        ctx.client
-            .try_unregister_webhook(&ctx.admin, &ctx.url("https://ghost.example.com/wh"));
+    let result = ctx
+        .client
+        .try_unregister_webhook(&ctx.admin, &ctx.url("https://ghost.example.com/wh"));
     assert_eq!(result, Err(Ok(ContractError::WebhookNotFound)));
 }
 

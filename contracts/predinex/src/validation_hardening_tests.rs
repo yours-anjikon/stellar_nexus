@@ -121,8 +121,8 @@ fn scheduled_claim_executes_when_due_and_can_be_cancelled() {
     settle_pool(&ctx, pool_id);
     let claim_id = ctx.client.schedule_claim(&ctx.user, &pool_id, &4_000);
     match ctx.client.try_execute_scheduled_claims() {
-        Err(Ok(ContractError::PoolNotExpired)) => {}
-        other => panic!("expected PoolNotExpired, got {:?}", other.err()),
+        Err(Ok(ContractError::ScheduledClaimNotDue)) => {}
+        other => panic!("expected ScheduledClaimNotDue, got {:?}", other.err()),
     }
     ctx.client.cancel_scheduled_claim(&ctx.user, &claim_id);
     assert_eq!(ctx.client.get_scheduled_claims(&1, &10).len(), 0);

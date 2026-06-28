@@ -129,14 +129,8 @@ fn fuzz_create_pool_target() {
 
         // Run try_create_pool and verify that any crash or unexpected panic is caught.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            t.client.try_create_pool(
-                &t.admin,
-                &title,
-                &desc,
-                &outcome_a,
-                &outcome_b,
-                &duration,
-            )
+            t.client
+                .try_create_pool(&t.admin, &title, &desc, &outcome_a, &outcome_b, &duration)
         }));
 
         match result {
@@ -145,22 +139,28 @@ fn fuzz_create_pool_target() {
                 if let Ok(err) = res_err {
                     // Make sure it matches one of our expected ContractErrors
                     match err {
-                        ContractError::TitleEmpty |
-                        ContractError::TitleTooLong |
-                        ContractError::DescriptionEmpty |
-                        ContractError::DescriptionTooLong |
-                        ContractError::OutcomeEmpty |
-                        ContractError::OutcomeTooLong |
-                        ContractError::StringWhitespaceOnly |
-                        ContractError::DuplicateOutcomeLabels |
-                        ContractError::DurationTooShort |
-                        ContractError::DurationTooLong => {}
-                        _ => panic!("Unexpected ContractError on create_pool fuzzing at iteration {}: {:?}", i, err),
+                        ContractError::TitleEmpty
+                        | ContractError::TitleTooLong
+                        | ContractError::DescriptionEmpty
+                        | ContractError::DescriptionTooLong
+                        | ContractError::OutcomeEmpty
+                        | ContractError::OutcomeTooLong
+                        | ContractError::StringWhitespaceOnly
+                        | ContractError::DuplicateOutcomeLabels
+                        | ContractError::DurationTooShort
+                        | ContractError::DurationTooLong => {}
+                        _ => panic!(
+                            "Unexpected ContractError on create_pool fuzzing at iteration {}: {:?}",
+                            i, err
+                        ),
                     }
                 }
             }
             Err(e) => {
-                panic!("CRASH / PANIC caught on create_pool fuzzing at iteration {}: {:?}", i, e);
+                panic!(
+                    "CRASH / PANIC caught on create_pool fuzzing at iteration {}: {:?}",
+                    i, e
+                );
             }
         }
     }
@@ -223,13 +223,8 @@ fn fuzz_place_bet_target() {
 
         // Run try_place_bet and catch unexpected crashes/panics.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            t.client.try_place_bet(
-                &user,
-                &target_pool_id,
-                &outcome,
-                &amount,
-                &referrer,
-            )
+            t.client
+                .try_place_bet(&user, &target_pool_id, &outcome, &amount, &referrer)
         }));
 
         match result {
@@ -237,16 +232,19 @@ fn fuzz_place_bet_target() {
             Ok(Err(res_err)) => {
                 if let Ok(err) = res_err {
                     match err {
-                        ContractError::InvalidBetAmount |
-                        ContractError::PoolNotFound |
-                        ContractError::PoolNotOpen |
-                        ContractError::PoolExpired |
-                        ContractError::InvalidOutcome |
-                        ContractError::PoolTotalOverflow |
-                        ContractError::UserBetOverflow |
-                        ContractError::PoolSizeLimitExceeded |
-                        ContractError::RateLimitExceeded => {}
-                        _ => panic!("Unexpected ContractError on place_bet fuzzing at iteration {}: {:?}", i, err),
+                        ContractError::InvalidBetAmount
+                        | ContractError::PoolNotFound
+                        | ContractError::PoolNotOpen
+                        | ContractError::PoolExpired
+                        | ContractError::InvalidOutcome
+                        | ContractError::PoolTotalOverflow
+                        | ContractError::UserBetOverflow
+                        | ContractError::PoolSizeLimitExceeded
+                        | ContractError::RateLimitExceeded => {}
+                        _ => panic!(
+                            "Unexpected ContractError on place_bet fuzzing at iteration {}: {:?}",
+                            i, err
+                        ),
                     }
                 }
             }
@@ -311,8 +309,10 @@ fn fuzz_settle_pool_target() {
     let token_admin = token::StellarAssetClient::new(&t.env, &t.token);
     token_admin.mint(&user_a, &1000);
     token_admin.mint(&user_b, &1000);
-    t.client.place_bet(&user_a, &settled_pool_id, &0, &500, &None::<Address>);
-    t.client.place_bet(&user_b, &settled_pool_id, &1, &500, &None::<Address>);
+    t.client
+        .place_bet(&user_a, &settled_pool_id, &0, &500, &None::<Address>);
+    t.client
+        .place_bet(&user_b, &settled_pool_id, &1, &500, &None::<Address>);
     t.env.ledger().with_mut(|li| li.timestamp = 3601);
     t.client.settle_pool(&t.admin, &settled_pool_id, &0);
 
@@ -345,7 +345,8 @@ fn fuzz_settle_pool_target() {
 
         // Run try_settle_pool and catch unexpected crashes/panics.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            t.client.try_settle_pool(&caller, &pool_id, &winning_outcome)
+            t.client
+                .try_settle_pool(&caller, &pool_id, &winning_outcome)
         }));
 
         match result {
@@ -353,14 +354,17 @@ fn fuzz_settle_pool_target() {
             Ok(Err(res_err)) => {
                 if let Ok(err) = res_err {
                     match err {
-                        ContractError::PoolNotFound |
-                        ContractError::PoolNotOpen |
-                        ContractError::PoolNotExpired |
-                        ContractError::PoolAlreadySettled |
-                        ContractError::InsufficientParticipants |
-                        ContractError::InvalidOutcome |
-                        ContractError::Unauthorized => {}
-                        _ => panic!("Unexpected ContractError on settle_pool fuzzing at iteration {}: {:?}", i, err),
+                        ContractError::PoolNotFound
+                        | ContractError::PoolNotOpen
+                        | ContractError::PoolNotExpired
+                        | ContractError::PoolAlreadySettled
+                        | ContractError::InsufficientParticipants
+                        | ContractError::InvalidOutcome
+                        | ContractError::Unauthorized => {}
+                        _ => panic!(
+                            "Unexpected ContractError on settle_pool fuzzing at iteration {}: {:?}",
+                            i, err
+                        ),
                     }
                 }
             }

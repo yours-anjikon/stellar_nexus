@@ -56,8 +56,7 @@ fn setup_ma() -> MaCtx<'static> {
     let client: PredinexContractClient<'static> = unsafe { core::mem::transmute(client) };
     let base_admin: token::StellarAssetClient<'static> =
         unsafe { core::mem::transmute(base_admin) };
-    let alt_admin: token::StellarAssetClient<'static> =
-        unsafe { core::mem::transmute(alt_admin) };
+    let alt_admin: token::StellarAssetClient<'static> = unsafe { core::mem::transmute(alt_admin) };
     let base_client: token::Client<'static> = unsafe { core::mem::transmute(base_client) };
     let alt_client: token::Client<'static> = unsafe { core::mem::transmute(alt_client) };
     let env: Env = unsafe { core::mem::transmute(env) };
@@ -139,8 +138,14 @@ fn ma1_pool_creation_validates_exchange_rates() {
         .expect("allowed tokens must be stored");
 
     assert_eq!(allowed.len(), 2, "pool must have 2 allowed tokens");
-    assert!(allowed.contains(&ctx.base_token), "base token must be in allowed list");
-    assert!(allowed.contains(&ctx.alt_token), "alt token must be in allowed list");
+    assert!(
+        allowed.contains(&ctx.base_token),
+        "base token must be in allowed list"
+    );
+    assert!(
+        allowed.contains(&ctx.alt_token),
+        "alt token must be in allowed list"
+    );
 
     // Exchange rates are readable.
     assert_eq!(
@@ -254,10 +259,20 @@ fn ma3_full_lifecycle_two_users_two_tokens() {
     ctx.alt_admin.mint(&user_b, &200i128);
 
     ctx.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &100i128, &ctx.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &100i128,
+        &ctx.base_token,
+        &None::<Address>,
     );
     ctx.client.place_multi_asset_bet(
-        &user_b, &pool_id, &1u32, &200i128, &ctx.alt_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &1u32,
+        &200i128,
+        &ctx.alt_token,
+        &None::<Address>,
     );
 
     // Normalised totals: total_a = 100, total_b = 200.
@@ -287,7 +302,9 @@ fn ma3_full_lifecycle_two_users_two_tokens() {
 
     // user_b is on the losing side and must receive nothing.
     assert!(
-        ctx.client.try_claim_multi_asset_winnings(&user_b, &pool_id).is_err(),
+        ctx.client
+            .try_claim_multi_asset_winnings(&user_b, &pool_id)
+            .is_err(),
         "loser must not be able to claim"
     );
 }
@@ -314,19 +331,34 @@ fn ma4_three_users_two_tokens_proportional_payout() {
     // user_a bets 300 base — normalised 300.
     ctx.base_admin.mint(&user_a, &300i128);
     ctx.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &300i128, &ctx.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &300i128,
+        &ctx.base_token,
+        &None::<Address>,
     );
 
     // user_b bets 400 alt — normalised 400 × 0.5 = 200.
     ctx.alt_admin.mint(&user_b, &400i128);
     ctx.client.place_multi_asset_bet(
-        &user_b, &pool_id, &0u32, &400i128, &ctx.alt_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &0u32,
+        &400i128,
+        &ctx.alt_token,
+        &None::<Address>,
     );
 
     // user_c bets 250 base on outcome 1.
     ctx.base_admin.mint(&user_c, &250i128);
     ctx.client.place_multi_asset_bet(
-        &user_c, &pool_id, &1u32, &250i128, &ctx.base_token, &None::<Address>,
+        &user_c,
+        &pool_id,
+        &1u32,
+        &250i128,
+        &ctx.base_token,
+        &None::<Address>,
     );
 
     // Verify normalised totals:
@@ -372,10 +404,10 @@ fn ma4_three_users_two_tokens_proportional_payout() {
 
     // Conservation: payouts + fees == total deposits per token.
     let total_base_paid = user_a_base + user_b_base; // 323 + 215 = 538 (539 - 1 dust)
-    let total_alt_paid = user_a_alt + user_b_alt;    // 235 + 156 = 391 (392 - 1 dust)
-    // Dust (≤ n_winners − 1) must be in pending fees.
+    let total_alt_paid = user_a_alt + user_b_alt; // 235 + 156 = 391 (392 - 1 dust)
+                                                  // Dust (≤ n_winners − 1) must be in pending fees.
     let net_base = 550i128 - (550 * 200 / 10_000); // 539
-    let net_alt  = 400i128 - (400 * 200 / 10_000); // 392
+    let net_alt = 400i128 - (400 * 200 / 10_000); // 392
     assert!(
         total_base_paid >= net_base - 1 && total_base_paid <= net_base,
         "total base paid must equal net_base (±1 dust), got {}",
@@ -389,7 +421,9 @@ fn ma4_three_users_two_tokens_proportional_payout() {
 
     // Loser cannot claim.
     assert!(
-        ctx.client.try_claim_multi_asset_winnings(&user_c, &pool_id).is_err(),
+        ctx.client
+            .try_claim_multi_asset_winnings(&user_c, &pool_id)
+            .is_err(),
         "loser must not be able to claim"
     );
 }
@@ -414,10 +448,20 @@ fn ma5_collect_fees_sends_both_token_fees_to_treasury() {
     ctx.alt_admin.mint(&user_b, &500i128);
 
     ctx.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &500i128, &ctx.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &500i128,
+        &ctx.base_token,
+        &None::<Address>,
     );
     ctx.client.place_multi_asset_bet(
-        &user_b, &pool_id, &1u32, &500i128, &ctx.alt_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &1u32,
+        &500i128,
+        &ctx.alt_token,
+        &None::<Address>,
     );
 
     expire(&ctx);
@@ -460,7 +504,9 @@ fn ma6_bet_with_unsupported_token_returns_error() {
     let pool_id = make_ma_pool(&ctx, &creator);
 
     // Register a third token with a rate but keep it out of the pool.
-    let third_asset = ctx.env.register_stellar_asset_contract_v2(ctx.treasury.clone());
+    let third_asset = ctx
+        .env
+        .register_stellar_asset_contract_v2(ctx.treasury.clone());
     let third_token = third_asset.address();
     ctx.client
         .set_token_exchange_rate(&ctx.treasury, &third_token, &10_000i128);
@@ -501,10 +547,20 @@ fn ma7_single_asset_claim_rejected_for_multi_asset_pool() {
     ctx.base_admin.mint(&user_b, &50i128);
 
     ctx.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &100i128, &ctx.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &100i128,
+        &ctx.base_token,
+        &None::<Address>,
     );
     ctx.client.place_multi_asset_bet(
-        &user_b, &pool_id, &1u32, &50i128, &ctx.base_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &1u32,
+        &50i128,
+        &ctx.base_token,
+        &None::<Address>,
     );
 
     expire(&ctx);

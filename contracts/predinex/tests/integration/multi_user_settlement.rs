@@ -109,9 +109,12 @@ fn mu1_three_users_full_lifecycle() {
 
     let pool_id = make_pool(&ctx, &creator);
 
-    ctx.client.place_bet(&user_a1, &pool_id, &0, &300, &None::<Address>);
-    ctx.client.place_bet(&user_a2, &pool_id, &0, &100, &None::<Address>);
-    ctx.client.place_bet(&user_b, &pool_id, &1, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&user_a1, &pool_id, &0, &300, &None::<Address>);
+    ctx.client
+        .place_bet(&user_a2, &pool_id, &0, &100, &None::<Address>);
+    ctx.client
+        .place_bet(&user_b, &pool_id, &1, &200, &None::<Address>);
 
     // Verify mid-flight pool state.
     let pool: Pool = ctx.client.get_pool(&pool_id).expect("pool must exist");
@@ -124,7 +127,10 @@ fn mu1_three_users_full_lifecycle() {
     expire(&ctx);
     ctx.client.settle_pool(&creator, &pool_id, &0);
 
-    let pool_after: Pool = ctx.client.get_pool(&pool_id).expect("pool must exist after settle");
+    let pool_after: Pool = ctx
+        .client
+        .get_pool(&pool_id)
+        .expect("pool must exist after settle");
     assert!(pool_after.settled, "pool must be marked settled");
     assert_eq!(pool_after.winning_outcome, Some(0));
 
@@ -146,7 +152,10 @@ fn mu1_three_users_full_lifecycle() {
 
     // Treasury holds the 2% fee (12 stroops) plus any rounding dust.
     let treasury_balance = ctx.client.get_treasury_balance();
-    assert_eq!(treasury_balance, 12, "treasury must hold exactly the protocol fee");
+    assert_eq!(
+        treasury_balance, 12,
+        "treasury must hold exactly the protocol fee"
+    );
 
     // Claim statuses reflect reality.
     assert_eq!(
@@ -192,7 +201,8 @@ fn mu2_five_winners_proportional_payout_conservation() {
     for &(outcome, amount) in stakes {
         let user = Address::generate(&ctx.env);
         mint(&ctx, &user, amount);
-        ctx.client.place_bet(&user, &pool_id, &outcome, &amount, &None::<Address>);
+        ctx.client
+            .place_bet(&user, &pool_id, &outcome, &amount, &None::<Address>);
         users.push((user, outcome, amount));
     }
 
@@ -202,7 +212,11 @@ fn mu2_five_winners_proportional_payout_conservation() {
     let total_pool: i128 = stakes.iter().map(|(_, a)| *a).sum();
     let fee = total_pool * 200 / 10_000;
     let net = total_pool - fee;
-    let total_a: i128 = stakes.iter().filter(|(o, _)| *o == 0).map(|(_, a)| *a).sum();
+    let total_a: i128 = stakes
+        .iter()
+        .filter(|(o, _)| *o == 0)
+        .map(|(_, a)| *a)
+        .sum();
 
     let mut total_paid = 0i128;
     for (user, outcome, stake) in &users {
@@ -224,7 +238,10 @@ fn mu2_five_winners_proportional_payout_conservation() {
         total_pool,
         "conservation: payouts + treasury must equal total staked"
     );
-    assert!(treasury >= fee, "treasury must hold at least the protocol fee");
+    assert!(
+        treasury >= fee,
+        "treasury must hold at least the protocol fee"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,9 +279,12 @@ fn mu3_dispute_blocks_claims_unfreeze_re_settles() {
         &3_600u64,
     );
 
-    ctx.client.place_bet(&user_a, &pool_id, &0, &400, &None::<Address>); // Yes
-    ctx.client.place_bet(&user_b, &pool_id, &1, &300, &None::<Address>); // No
-    ctx.client.place_bet(&user_c, &pool_id, &1, &300, &None::<Address>); // No
+    ctx.client
+        .place_bet(&user_a, &pool_id, &0, &400, &None::<Address>); // Yes
+    ctx.client
+        .place_bet(&user_b, &pool_id, &1, &300, &None::<Address>); // No
+    ctx.client
+        .place_bet(&user_c, &pool_id, &1, &300, &None::<Address>); // No
 
     // Expire and settle — outcome 0 (Yes) declared winner.
     expire(&ctx);
@@ -296,7 +316,11 @@ fn mu3_dispute_blocks_claims_unfreeze_re_settles() {
 
     {
         let pool: Pool = ctx.client.get_pool(&pool_id).unwrap();
-        assert_eq!(pool.status, PoolStatus::Open, "pool must be Open after unfreeze");
+        assert_eq!(
+            pool.status,
+            PoolStatus::Open,
+            "pool must be Open after unfreeze"
+        );
     }
 
     // Phase 4: additional user places a bet while pool is back open.
@@ -305,7 +329,8 @@ fn mu3_dispute_blocks_claims_unfreeze_re_settles() {
     ctx.env.ledger().with_mut(|l| l.timestamp = 100);
     let user_d = Address::generate(&ctx.env);
     mint(&ctx, &user_d, 200);
-    ctx.client.place_bet(&user_d, &pool_id, &0, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&user_d, &pool_id, &0, &200, &None::<Address>);
 
     // Phase 5: expire again and re-settle (outcome 0 wins again).
     ctx.env.ledger().with_mut(|l| l.timestamp = 3_700);
@@ -344,9 +369,9 @@ fn mu4_fee_accumulation_multiple_pools_treasury_withdrawal() {
 
     // Three pools with different sizes.
     let pool_configs: &[(i128, i128)] = &[
-        (1_000, 500),  // pool 1: total 1500
+        (1_000, 500),   // pool 1: total 1500
         (2_000, 3_000), // pool 2: total 5000
-        (750, 250),    // pool 3: total 1000
+        (750, 250),     // pool 3: total 1000
     ];
 
     let mut pool_ids = std::vec![];
@@ -363,8 +388,10 @@ fn mu4_fee_accumulation_multiple_pools_treasury_withdrawal() {
         mint(&ctx, &winner, stake_a);
         mint(&ctx, &loser, stake_b);
 
-        ctx.client.place_bet(&winner, &pool_id, &0, &stake_a, &None::<Address>);
-        ctx.client.place_bet(&loser, &pool_id, &1, &stake_b, &None::<Address>);
+        ctx.client
+            .place_bet(&winner, &pool_id, &0, &stake_a, &None::<Address>);
+        ctx.client
+            .place_bet(&loser, &pool_id, &1, &stake_b, &None::<Address>);
 
         let pool_total = stake_a + stake_b;
         expected_fee_total += pool_total * 200 / 10_000;
@@ -392,7 +419,8 @@ fn mu4_fee_accumulation_multiple_pools_treasury_withdrawal() {
 
     // Treasury recipient withdraws the full accumulated balance.
     let treasury_token_before = ctx.token.balance(&ctx.treasury);
-    ctx.client.withdraw_treasury(&ctx.treasury, &treasury_balance);
+    ctx.client
+        .withdraw_treasury(&ctx.treasury, &treasury_balance);
     let treasury_token_after = ctx.token.balance(&ctx.treasury);
 
     assert_eq!(
@@ -437,8 +465,10 @@ fn mu5_concurrent_pools_state_isolated() {
         mint(&ctx, &winner, stake);
         mint(&ctx, &loser, stake);
 
-        ctx.client.place_bet(&winner, &pool_id, &0, &stake, &None::<Address>);
-        ctx.client.place_bet(&loser, &pool_id, &1, &stake, &None::<Address>);
+        ctx.client
+            .place_bet(&winner, &pool_id, &0, &stake, &None::<Address>);
+        ctx.client
+            .place_bet(&loser, &pool_id, &1, &stake, &None::<Address>);
 
         pool_ids.push(pool_id);
         winners.push(winner);
@@ -448,9 +478,18 @@ fn mu5_concurrent_pools_state_isolated() {
     // Verify isolation: each pool has independent totals.
     for &pool_id in &pool_ids {
         let pool: Pool = ctx.client.get_pool(&pool_id).expect("pool must exist");
-        assert_eq!(pool.total_a, stake, "each pool total_a must be exactly one stake");
-        assert_eq!(pool.total_b, stake, "each pool total_b must be exactly one stake");
-        assert_eq!(pool.participant_count, 2, "each pool must have exactly 2 participants");
+        assert_eq!(
+            pool.total_a, stake,
+            "each pool total_a must be exactly one stake"
+        );
+        assert_eq!(
+            pool.total_b, stake,
+            "each pool total_b must be exactly one stake"
+        );
+        assert_eq!(
+            pool.participant_count, 2,
+            "each pool must have exactly 2 participants"
+        );
     }
 
     // Expire and settle all pools.
@@ -516,7 +555,8 @@ fn mu6_freeze_blocks_bets_unfreeze_resumes_betting() {
     let pool_id = make_pool(&ctx, &creator);
 
     // user_a bets before freeze.
-    ctx.client.place_bet(&user_a, &pool_id, &0, &500, &None::<Address>);
+    ctx.client
+        .place_bet(&user_a, &pool_id, &0, &500, &None::<Address>);
 
     // Freeze the pool.
     ctx.client.freeze_pool(&freeze_admin, &pool_id);
@@ -528,7 +568,9 @@ fn mu6_freeze_blocks_bets_unfreeze_resumes_betting() {
 
     // Bet from user_b is rejected.
     assert!(
-        ctx.client.try_place_bet(&user_b, &pool_id, &1, &300, &None::<Address>).is_err(),
+        ctx.client
+            .try_place_bet(&user_b, &pool_id, &1, &300, &None::<Address>)
+            .is_err(),
         "bet must be rejected while pool is frozen"
     );
 
@@ -537,12 +579,18 @@ fn mu6_freeze_blocks_bets_unfreeze_resumes_betting() {
 
     {
         let pool: Pool = ctx.client.get_pool(&pool_id).unwrap();
-        assert_eq!(pool.status, PoolStatus::Open, "pool must be Open after unfreeze");
+        assert_eq!(
+            pool.status,
+            PoolStatus::Open,
+            "pool must be Open after unfreeze"
+        );
     }
 
     // user_b and user_c can now bet.
-    ctx.client.place_bet(&user_b, &pool_id, &1, &300, &None::<Address>);
-    ctx.client.place_bet(&user_c, &pool_id, &1, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&user_b, &pool_id, &1, &300, &None::<Address>);
+    ctx.client
+        .place_bet(&user_c, &pool_id, &1, &200, &None::<Address>);
 
     // Full lifecycle: expire, settle, claim.
     expire(&ctx);
@@ -579,8 +627,10 @@ fn mu7_double_claim_rejected() {
     mint(&ctx, &loser, 200);
 
     let pool_id = make_pool(&ctx, &creator);
-    ctx.client.place_bet(&winner, &pool_id, &0, &200, &None::<Address>);
-    ctx.client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&winner, &pool_id, &0, &200, &None::<Address>);
+    ctx.client
+        .place_bet(&loser, &pool_id, &1, &200, &None::<Address>);
 
     expire(&ctx);
     ctx.client.settle_pool(&creator, &pool_id, &0);
