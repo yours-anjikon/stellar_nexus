@@ -215,4 +215,88 @@ describe('CreateMarket wizard', () => {
       expect(screen.queryByText(/title is required/i)).not.toBeInTheDocument();
     });
   });
+
+  it('shows an error toast when the contract call fails due to network error', async () => {
+    vi.mocked(predinexContract.createMarketSoroban).mockRejectedValue(
+      new Error('Network error: connection refused')
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<CreateMarket />);
+
+    await advanceToReview(user);
+    await user.click(screen.getByRole('button', { name: /create market/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to create market/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows and accepts the transaction fee modal before completing the submission', async () => {
+    vi.mocked(predinexContract.createMarketSoroban).mockImplementation(async (params) => {
+      const approved = await params.onFeeEstimated?.('500');
+      if (!approved) throw new Error('Fee rejected');
+      return { txHash: 'mock-fee-tx' };
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders(<CreateMarket />);
+
+    await advanceToReview(user);
+    await user.click(screen.getByRole('button', { name: /create market/i }));
+
+    // Fee modal should appear with the estimated fee
+    expect(await screen.findByText(/confirm transaction/i)).toBeInTheDocument();
+
+    // Confirm the fee
+    await user.click(screen.getByRole('button', { name: /^confirm$/i }));
+
+    // Transaction should complete successfully
+    await waitFor(() => {
+      expect(screen.getByText(/market created!/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows a failure toast when fee is rejected in the transaction fee modal', async () => {
+    vi.mocked(predinexContract.createMarketSoroban).mockImplementation(async (params) => {
+      const approved = await params.onFeeEstimated?.('500');
+      if (!approved) throw new Error('User rejected fee estimation');
+      return { txHash: 'mock-tx' };
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders(<CreateMarket />);
+
+    await advanceToReview(user);
+    await user.click(screen.getByRole('button', { name: /create market/i }));
+
+    // Fee modal should appear
+    expect(await screen.findByText(/confirm transaction/i)).toBeInTheDocument();
+
+    // Cancel the fee
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    // Should show failure toast
+    await waitFor(() => {
+      expect(screen.getByText(/failed to create market/i)).toBeInTheDocument();
+    });
+  });
+
+  it('validates duration must be a positive number on step 2', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CreateMarket />);
+
+    await fillStep1(user);
+    await user.click(screen.getByRole('button', { name: /^next/i }));
+    expect(await screen.findByLabelText(/duration/i)).toBeInTheDocument();
+
+    const durationInput = screen.getByLabelText(/duration/i);
+    await user.clear(durationInput);
+    await user.type(durationInput, '0');
+    await user.click(screen.getByRole('button', { name: /^next/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/duration/i)).toBeInTheDocument();
+    });
+  });
 });

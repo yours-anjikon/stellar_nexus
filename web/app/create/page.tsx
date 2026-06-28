@@ -12,6 +12,7 @@ import { predinexContract } from '../lib/adapters/predinex-contract';
 import { invalidateOnCreatePool } from '../lib/cache-invalidation';
 import { TxStage } from '../lib/soroban-transaction-service';
 import { TransactionFeeModal } from '@/components/TransactionFeeModal';
+import RouteErrorBoundary from '../../components/RouteErrorBoundary';
 import { useCreateWizard, type WizardStep } from './_wizard/useCreateWizard';
 import { StepIndicator } from './_wizard/StepIndicator';
 import { StepQuestion } from './_wizard/StepQuestion';
@@ -107,6 +108,7 @@ export default function CreateMarket() {
   return (
     <main className="min-h-screen bg-background">
       <Navbar />
+      <RouteErrorBoundary routeName="CreateMarket">
       <AuthGuard>
         <div className="container mx-auto px-4 py-12 max-w-2xl">
           <h1 className="text-3xl font-bold mb-8">Create new market</h1>
@@ -221,6 +223,7 @@ export default function CreateMarket() {
           </form>
         </div>
       </AuthGuard>
+      </RouteErrorBoundary>
     </main>
   );
 }

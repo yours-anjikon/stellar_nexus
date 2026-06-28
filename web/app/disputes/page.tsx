@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import RouteErrorBoundary from '../../components/RouteErrorBoundary';
 import Navbar from '@/components/Navbar';
 
 function DisputeManagementSkeleton() {
@@ -25,7 +26,9 @@ export default function DisputesPage() {
   return (
     <main className="min-h-screen bg-background">
       <Navbar />
-      <DisputeManagement />
+      <RouteErrorBoundary routeName="Disputes">
+        <DisputeManagement />
+      </RouteErrorBoundary>
     </main>
   );
 }
