@@ -6,6 +6,12 @@ export interface AgentEvent {
   kind: string;
 }
 
+export interface AgentLlmError {
+  message: string;
+  code?: string;
+  iteration: number;
+}
+
 export interface AgentResult {
   response: string;
   toolCalls: Array<{ tool: string; input: unknown; result: any }>;
@@ -15,6 +21,7 @@ export interface AgentResult {
     completionTokens: number;
   };
   events?: AgentEvent[];
+  error?: AgentLlmError;
 }
 
 export interface AgentInfo {

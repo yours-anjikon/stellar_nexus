@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bar } from "../primitives/bar";
 import { Btn } from "../primitives/btn";
 import { Card } from "../primitives/card";
-import type { AgentResult, SpendingData } from "../types";
+import type { AgentResult, AgentLlmError, SpendingData } from "../types";
 import type { RecipientProfile } from "../../lib/types";
 
 export interface OverviewTabProps {
@@ -171,6 +171,10 @@ export function OverviewTab({
         </div>
       )}
 
+      {agentResult?.error && (
+        <LlmErrorBanner error={agentResult.error} />
+      )}
+
       {agentResult && (
         <div
           className="bg-white rounded-xl border border-slate-200 p-6"
@@ -209,6 +213,19 @@ export function OverviewTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LlmErrorBanner({ error }: { error: AgentLlmError }) {
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="bg-red-50 border border-red-300 rounded-xl p-4 text-sm text-red-800"
+    >
+      <p className="font-semibold mb-1">⚠ LLM error at iteration {error.iteration} — results below are partial</p>
+      <p className="text-red-700">{error.message}{error.code ? ` (${error.code})` : ""}</p>
     </div>
   );
 }
