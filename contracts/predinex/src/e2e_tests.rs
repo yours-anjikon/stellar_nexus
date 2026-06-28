@@ -82,8 +82,10 @@ fn test_e2e_successful_lifecycle() {
     assert_eq!(pool.expiry, 3700);
 
     // Step 2: Place Bets
-    t.client.place_bet(&user_a, &pool_id, &0u32, &500i128, &None::<Address>);
-    t.client.place_bet(&user_b, &pool_id, &1u32, &500i128, &None::<Address>);
+    t.client
+        .place_bet(&user_a, &pool_id, &0u32, &500i128, &None::<Address>);
+    t.client
+        .place_bet(&user_b, &pool_id, &1u32, &500i128, &None::<Address>);
 
     // Verify token escrows and pool state
     assert_eq!(token_client.balance(&user_a), 500);
@@ -145,8 +147,10 @@ fn test_e2e_void_and_refund() {
     );
 
     // Step 2: Bet
-    t.client.place_bet(&user_a, &pool_id, &0u32, &300i128, &None::<Address>);
-    t.client.place_bet(&user_b, &pool_id, &1u32, &400i128, &None::<Address>);
+    t.client
+        .place_bet(&user_a, &pool_id, &0u32, &300i128, &None::<Address>);
+    t.client
+        .place_bet(&user_b, &pool_id, &1u32, &400i128, &None::<Address>);
 
     // Step 3: Void Pool (Creator only)
     t.client.void_pool(&creator, &pool_id);
@@ -188,8 +192,10 @@ fn test_e2e_dispute_unfreeze_claim() {
         &3600,
         &MIN_CREATOR_DEPOSIT,
     );
-    t.client.place_bet(&user_a, &pool_id, &0u32, &500i128, &None::<Address>);
-    t.client.place_bet(&user_b, &pool_id, &1u32, &500i128, &None::<Address>);
+    t.client
+        .place_bet(&user_a, &pool_id, &0u32, &500i128, &None::<Address>);
+    t.client
+        .place_bet(&user_b, &pool_id, &1u32, &500i128, &None::<Address>);
 
     // Step 2: Settle
     t.env.ledger().with_mut(|li| li.timestamp = 3701);
@@ -278,7 +284,10 @@ fn test_e2e_zero_activity_pool_cannot_settle() {
 
     // Settlement must fail: pool has 0 participants (< DEFAULT_MIN_SETTLEMENT_PARTICIPANTS).
     let settle_result = t.client.try_settle_pool(&creator, &pool_id, &0u32);
-    assert_eq!(settle_result, Err(Ok(ContractError::InsufficientParticipants)));
+    assert_eq!(
+        settle_result,
+        Err(Ok(ContractError::InsufficientParticipants))
+    );
 
     // A claim attempt on an unsettled pool fails with PoolNotSettled (the pool
     // status check fires before the bet-existence check).
@@ -312,8 +321,10 @@ fn test_e2e_expired_unsettled_refund() {
     );
 
     // Place bets — pool is live.
-    t.client.place_bet(&user_a, &pool_id, &0u32, &400i128, &None::<Address>);
-    t.client.place_bet(&user_b, &pool_id, &1u32, &600i128, &None::<Address>);
+    t.client
+        .place_bet(&user_a, &pool_id, &0u32, &400i128, &None::<Address>);
+    t.client
+        .place_bet(&user_b, &pool_id, &1u32, &600i128, &None::<Address>);
 
     assert_eq!(token_client.balance(&user_a), 600);
     assert_eq!(token_client.balance(&user_b), 400);
@@ -328,9 +339,21 @@ fn test_e2e_expired_unsettled_refund() {
     assert_eq!(refund_a, 400, "user_a must get full 400 back");
     assert_eq!(refund_b, 600, "user_b must get full 600 back");
 
-    assert_eq!(token_client.balance(&user_a), 1000, "user_a balance restored");
-    assert_eq!(token_client.balance(&user_b), 1000, "user_b balance restored");
-    assert_eq!(token_client.balance(&t.client.address), 0, "contract holds nothing");
+    assert_eq!(
+        token_client.balance(&user_a),
+        1000,
+        "user_a balance restored"
+    );
+    assert_eq!(
+        token_client.balance(&user_b),
+        1000,
+        "user_b balance restored"
+    );
+    assert_eq!(
+        token_client.balance(&t.client.address),
+        0,
+        "contract holds nothing"
+    );
 
     // Double-claim is rejected: bet record was removed on first call.
     let second_claim = t.client.try_claim_expired(&user_a, &pool_id);
@@ -357,14 +380,18 @@ fn test_e2e_min_bet_enforcement() {
     );
 
     // Set minimum bet to 1_000 (max = 0 means no upper limit).
-    t.client.set_pool_bet_limits(&t.treasury, &pool_id, &1_000i128, &0i128);
+    t.client
+        .set_pool_bet_limits(&t.treasury, &pool_id, &1_000i128, &0i128);
 
     // Bet below minimum must fail.
-    let low_bet = t.client.try_place_bet(&user, &pool_id, &0u32, &999i128, &None::<Address>);
+    let low_bet = t
+        .client
+        .try_place_bet(&user, &pool_id, &0u32, &999i128, &None::<Address>);
     assert_eq!(low_bet, Err(Ok(ContractError::BetBelowMinBet)));
 
     // Bet exactly at minimum must succeed.
-    t.client.place_bet(&user, &pool_id, &0u32, &1_000i128, &None::<Address>);
+    t.client
+        .place_bet(&user, &pool_id, &0u32, &1_000i128, &None::<Address>);
 }
 
 /// 8. E2E: Maximum bet enforcement — bets above the ceiling are rejected
@@ -387,14 +414,18 @@ fn test_e2e_max_bet_enforcement() {
     );
 
     // Set maximum bet to 500 (min = 0 means no lower limit).
-    t.client.set_pool_bet_limits(&t.treasury, &pool_id, &0i128, &500i128);
+    t.client
+        .set_pool_bet_limits(&t.treasury, &pool_id, &0i128, &500i128);
 
     // Bet above maximum must fail.
-    let high_bet = t.client.try_place_bet(&user, &pool_id, &0u32, &501i128, &None::<Address>);
+    let high_bet = t
+        .client
+        .try_place_bet(&user, &pool_id, &0u32, &501i128, &None::<Address>);
     assert_eq!(high_bet, Err(Ok(ContractError::BetAboveMaxBet)));
 
     // Bet exactly at maximum must succeed.
-    t.client.place_bet(&user, &pool_id, &0u32, &500i128, &None::<Address>);
+    t.client
+        .place_bet(&user, &pool_id, &0u32, &500i128, &None::<Address>);
 }
 
 /// 9. E2E: Multi-bettor proportional distribution — exact payout math and dust sweep
@@ -438,14 +469,22 @@ fn test_e2e_multiple_bettors_proportional_distribution() {
         &MIN_CREATOR_DEPOSIT,
     );
 
-    t.client.place_bet(&w1, &pool_id, &0u32, &100i128, &None::<Address>);
-    t.client.place_bet(&w2, &pool_id, &0u32, &200i128, &None::<Address>);
-    t.client.place_bet(&w3, &pool_id, &0u32, &300i128, &None::<Address>);
-    t.client.place_bet(&w4, &pool_id, &0u32, &400i128, &None::<Address>);
-    t.client.place_bet(&w5, &pool_id, &0u32, &500i128, &None::<Address>);
-    t.client.place_bet(&l1, &pool_id, &1u32, &150i128, &None::<Address>);
-    t.client.place_bet(&l2, &pool_id, &1u32, &250i128, &None::<Address>);
-    t.client.place_bet(&l3, &pool_id, &1u32, &350i128, &None::<Address>);
+    t.client
+        .place_bet(&w1, &pool_id, &0u32, &100i128, &None::<Address>);
+    t.client
+        .place_bet(&w2, &pool_id, &0u32, &200i128, &None::<Address>);
+    t.client
+        .place_bet(&w3, &pool_id, &0u32, &300i128, &None::<Address>);
+    t.client
+        .place_bet(&w4, &pool_id, &0u32, &400i128, &None::<Address>);
+    t.client
+        .place_bet(&w5, &pool_id, &0u32, &500i128, &None::<Address>);
+    t.client
+        .place_bet(&l1, &pool_id, &1u32, &150i128, &None::<Address>);
+    t.client
+        .place_bet(&l2, &pool_id, &1u32, &250i128, &None::<Address>);
+    t.client
+        .place_bet(&l3, &pool_id, &1u32, &350i128, &None::<Address>);
 
     t.env.ledger().with_mut(|li| li.timestamp = 3701);
     t.client.settle_pool(&creator, &pool_id, &0u32);
@@ -465,17 +504,33 @@ fn test_e2e_multiple_bettors_proportional_distribution() {
     assert_eq!(p5, 735, "w5 payout");
 
     // Entire net pool distributed (no stranded funds).
-    assert_eq!(p1 + p2 + p3 + p4 + p5, 2205, "sum of payouts must equal net pool");
+    assert_eq!(
+        p1 + p2 + p3 + p4 + p5,
+        2205,
+        "sum of payouts must equal net pool"
+    );
 
     // Treasury holds exactly the 2% fee.
     assert_eq!(t.client.get_treasury_balance(), 45, "treasury must hold 45");
 
     // Losers cannot claim.
-    assert_eq!(t.client.try_claim_winnings(&l1, &pool_id), Err(Ok(ContractError::NoWinningsToClaim)));
-    assert_eq!(t.client.try_claim_winnings(&l2, &pool_id), Err(Ok(ContractError::NoWinningsToClaim)));
-    assert_eq!(t.client.try_claim_winnings(&l3, &pool_id), Err(Ok(ContractError::NoWinningsToClaim)));
+    assert_eq!(
+        t.client.try_claim_winnings(&l1, &pool_id),
+        Err(Ok(ContractError::NoWinningsToClaim))
+    );
+    assert_eq!(
+        t.client.try_claim_winnings(&l2, &pool_id),
+        Err(Ok(ContractError::NoWinningsToClaim))
+    );
+    assert_eq!(
+        t.client.try_claim_winnings(&l3, &pool_id),
+        Err(Ok(ContractError::NoWinningsToClaim))
+    );
 
     // Contract holds nothing after all claims (fee stays until treasury withdrawal).
     let contract_balance = token_client.balance(&t.client.address);
-    assert_eq!(contract_balance, 45, "contract holds only the unclaimed fee");
+    assert_eq!(
+        contract_balance, 45,
+        "contract holds only the unclaimed fee"
+    );
 }

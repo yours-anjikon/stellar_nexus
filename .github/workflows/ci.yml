@@ -325,7 +325,7 @@ jobs:
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Comment PR with WASM size trend
-        if: always() && github.event_name == 'pull_request' && steps.wasm_size_summary.outputs.comment_path != ''
+        if: always() && github.event_name == 'pull_request' && steps.wasm_size_summary.outputs.comment_path != '' && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
         env:
           WASM_SIZE_COMMENT_PATH: ${{ steps.wasm_size_summary.outputs.comment_path }}
@@ -377,6 +377,7 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     defaults:
       run:
@@ -393,7 +394,7 @@ jobs:
         id: benchmarks
         run: |
           rm -f benchmark-results.json
-          cargo test --release bench_ -- --nocapture 2>&1 | tee bench-output.txt
+          cargo test --release --features testutils bench_ -- --nocapture 2>&1 | tee bench-output.txt
           echo "bench_output_path=$PWD/bench-output.txt" >> "$GITHUB_OUTPUT"
           echo "results_path=$PWD/benchmark-results.json" >> "$GITHUB_OUTPUT"
 
@@ -420,7 +421,7 @@ jobs:
           echo "comment_path=$comment_path" >> "$GITHUB_OUTPUT"
 
       - name: Post benchmark comment
-        if: always() && steps.bench_comment.outputs.comment_path != ''
+        if: always() && steps.bench_comment.outputs.comment_path != '' && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
         env:
           BENCH_COMMENT_PATH: ${{ steps.bench_comment.outputs.comment_path }}

@@ -1,28 +1,30 @@
 #![no_std]
 // The soroban contractimpl/contractclient macros generate functions that exceed
 // clippy's default argument limit. Allow this for macro-generated code only.
+// TODO(#XXX): Migrate to #[contractevent] instead of deprecated Events::publish
 #![allow(clippy::too_many_arguments)]
+#![allow(deprecated)]
 extern crate alloc;
 use alloc::vec;
-use soroban_sdk::{panic_with_error, 
+use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, Env, String, Symbol, Vec,
 };
 
 mod benchmark_tests;
-mod bet_management_tests;
-mod fuzz_tests;
-mod multi_user_tests;
 mod benchmarks;
+mod bet_management_tests;
+mod create_pool_validation_tests;
+mod e2e_tests;
+mod fuzz;
+mod fuzz_tests;
+mod multi_asset_tests;
+mod multi_user_tests;
 mod pause_tests;
 mod protocol_fee_tests;
 mod test;
 mod validation_hardening_tests;
 mod validation_prop_tests;
-mod fuzz;
-mod e2e_tests;
 mod webhook_test;
-mod multi_asset_tests;
-mod create_pool_validation_tests;
 
 // ── Issue #175: Event schema versioning ──────────────────────────────────────
 //
@@ -367,6 +369,10 @@ pub enum ContractError {
     DeadlineInPast = 64,
     /// Creator deposit is below the minimum required at pool creation.
     InsufficientCreatorDeposit = 65,
+    /// #634 — Outcome count exceeds the hard upper bound.
+    TooManyOutcomes = 66,
+    /// A duplicate token was provided in the allowed-token list.
+    DuplicateToken = 67,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -952,11 +958,14 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .set(&DataKey::TreasuryRecipient, &treasury_recipient);
-        env.storage().persistent().set(&DataKey::FeeRecipient, &treasury_recipient);
+        env.storage()
+            .persistent()
+            .set(&DataKey::FeeRecipient, &treasury_recipient);
         env.storage().persistent().set(&DataKey::FeeRate, &0u32);
         env.storage().persistent().set(&DataKey::Treasury, &0i128);
         env.storage().persistent().set(&DataKey::Admin, &admin);
-        env.events().publish((Symbol::new(&env, "AdminSet"), event_version(&env)), admin);
+        env.events()
+            .publish((Symbol::new(&env, "AdminSet"), event_version(&env)), admin);
         // #191 — persist the contract state schema version on initialization.
         env.storage().persistent().set(
             &DataKey::ContractVersion,
@@ -1004,7 +1013,11 @@ impl PredinexContract {
             .storage()
             .persistent()
             .get::<_, Address>(&DataKey::FeeRecipient)
-            .or_else(|| env.storage().persistent().get::<_, Address>(&DataKey::TreasuryRecipient))
+            .or_else(|| {
+                env.storage()
+                    .persistent()
+                    .get::<_, Address>(&DataKey::TreasuryRecipient)
+            })
             .unwrap_or_else(|| env.current_contract_address());
         (fee_rate, fee_recipient)
     }
@@ -2504,7 +2517,7 @@ impl PredinexContract {
         let is_first_bet = user_bet.total_bet == 0;
         if is_first_bet {
             pool.participant_count += 1;
-            
+
             let mut bettors = env
                 .storage()
                 .persistent()
@@ -3536,6 +3549,9 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .remove(&DataKey::UserBet(pool_id, user.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::UserOutcomeBets(pool_id, user.clone()));
 
         env.events().publish(
             (
@@ -3681,7 +3697,9 @@ impl PredinexContract {
         }
 
         pool.status = PoolStatus::Cancelled;
-        env.storage().persistent().set(&DataKey::Pool(pool_id), &pool);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Pool(pool_id), &pool);
         env.storage().persistent().extend_ttl(
             &DataKey::Pool(pool_id),
             POOL_BUMP_THRESHOLD,
@@ -3723,7 +3741,11 @@ impl PredinexContract {
         }
 
         env.events().publish(
-            (Symbol::new(&env, "refund_expired_pool"), event_version(&env), pool_id),
+            (
+                Symbol::new(&env, "refund_expired_pool"),
+                event_version(&env),
+                pool_id,
+            ),
             PoolRefundedEvent { total_refunded },
         );
 
@@ -4616,58 +4638,6 @@ impl PredinexContract {
         Ok(())
     }
 
-    /// #633 — Rescue stuck or accidentally-sent tokens from the contract.
-    ///
-    /// Transfers `amount` of any `token` held by the contract to the treasury
-    /// recipient. Intended for recovering tokens that were sent to the contract
-    /// address by mistake, or any token other than the primary betting token
-    /// that has accumulated in the contract.
-    ///
-    /// Only the treasury recipient can call this. Every successful rescue emits
-    /// a `tokens_rescued` event so off-chain indexers and monitoring tools can
-    /// detect and audit all rescue operations.
-    ///
-    /// # Arguments
-    /// * `caller` — must be the treasury recipient
-    /// * `token`  — the token contract address to rescue
-    /// * `amount` — number of stroops (raw token units) to transfer; must be > 0
-    pub fn rescue_tokens(
-        env: Env,
-        caller: Address,
-        token: Address,
-        amount: i128,
-    ) -> Result<(), ContractError> {
-        caller.require_auth();
-
-        let treasury_recipient: Address = env
-            .storage()
-            .persistent()
-            .get(&DataKey::TreasuryRecipient)
-            .ok_or(ContractError::NotInitialized)?;
-
-        if caller != treasury_recipient {
-            return Err(ContractError::Unauthorized);
-        }
-
-        if amount <= 0 {
-            return Err(ContractError::InvalidWithdrawalAmount);
-        }
-
-        let token_client = token::Client::new(&env, &token);
-        token_client.transfer(&env.current_contract_address(), &treasury_recipient, &amount);
-
-        env.events().publish(
-            (
-                Symbol::new(&env, "tokens_rescued"),
-                event_version(&env),
-                token,
-                amount,
-            ),
-            caller,
-        );
-        Ok(())
-    }
-
     /// Set (or replace) the freeze admin address. Only callable by the treasury recipient.
     pub fn set_freeze_admin(
         env: Env,
@@ -4703,22 +4673,14 @@ impl PredinexContract {
     /// treasury recipient and freeze admin. Only the treasury recipient may
     /// assign the admin. The admin address is used by `require_admin` for any
     /// operation that needs a contract-level admin check.
-    pub fn set_admin(
-        env: Env,
-        caller: Address,
-        admin: Address,
-    ) -> Result<(), ContractError> {
+    pub fn set_admin(env: Env, caller: Address, admin: Address) -> Result<(), ContractError> {
         caller.require_auth();
         Self::require_treasury_recipient(&env, &caller)?;
 
-        env.storage()
-            .persistent()
-            .set(&DataKey::Admin, &admin);
+        env.storage().persistent().set(&DataKey::Admin, &admin);
 
-        env.events().publish(
-            (Symbol::new(&env, "admin_set"), event_version(&env)),
-            admin,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "admin_set"), event_version(&env)), admin);
         Ok(())
     }
 
@@ -5417,7 +5379,6 @@ impl PredinexContract {
         result
     }
 
-
     fn is_initialized(env: &Env) -> bool {
         env.storage().persistent().has(&DataKey::Token)
     }
@@ -5825,7 +5786,14 @@ impl PredinexContract {
         let bps = Self::get_referral_bps(env.clone());
 
         // Delegate to place_bet (which handles all pool/bet validation).
-        Self::place_bet(env.clone(), user, pool_id, outcome, amount, Some(referrer.clone()))?;
+        Self::place_bet(
+            env.clone(),
+            user,
+            pool_id,
+            outcome,
+            amount,
+            Some(referrer.clone()),
+        )?;
 
         // Credit referral reward if bps > 0.
         if bps > 0 {
@@ -5837,11 +5805,9 @@ impl PredinexContract {
                     .checked_add(reward)
                     .ok_or(ContractError::TreasuryOverflow)?;
                 env.storage().persistent().set(&key, &next);
-                env.storage().persistent().extend_ttl(
-                    &key,
-                    POOL_BUMP_THRESHOLD,
-                    POOL_BUMP_TARGET,
-                );
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
 
                 let total: i128 = env
                     .storage()
@@ -5976,10 +5942,7 @@ impl PredinexContract {
         );
 
         env.events().publish(
-            (
-                Symbol::new(&env, "webhook_registered"),
-                event_version(&env),
-            ),
+            (Symbol::new(&env, "webhook_registered"), event_version(&env)),
             (url, event_types.len()),
         );
         Ok(())
@@ -5989,11 +5952,7 @@ impl PredinexContract {
     ///
     /// Only callable by the treasury recipient. Returns `WebhookNotFound` when
     /// no entry matches. Emits a `webhook_unregistered` event on success.
-    pub fn unregister_webhook(
-        env: Env,
-        caller: Address,
-        url: String,
-    ) -> Result<(), ContractError> {
+    pub fn unregister_webhook(env: Env, caller: Address, url: String) -> Result<(), ContractError> {
         caller.require_auth();
         Self::require_treasury_recipient(&env, &caller)?;
 
@@ -6142,8 +6101,8 @@ impl PredinexContract {
             env.ledger().timestamp(),
             PoolStatus::Open,
             DEFAULT_TWAP_PERIOD_SECS,
+            None,
         )?;
-
         env.storage()
             .persistent()
             .set(&DataKey::PoolAllowedTokens(pool_id), &allowed_tokens);
@@ -6415,14 +6374,10 @@ impl PredinexContract {
         let new_deposit = prev_deposit
             .checked_add(amount)
             .ok_or(ContractError::PoolTotalOverflow)?;
+        env.storage().persistent().set(&deposit_key, &new_deposit);
         env.storage()
             .persistent()
-            .set(&deposit_key, &new_deposit);
-        env.storage().persistent().extend_ttl(
-            &deposit_key,
-            POOL_BUMP_THRESHOLD,
-            POOL_BUMP_TARGET,
-        );
+            .extend_ttl(&deposit_key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
 
         // Update pool totals and user positions using the normalised amount
         // (same path as regular place_bet, so odds and claims work identically).
@@ -6490,13 +6445,6 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .set(&DataKey::PoolOutcomeTotals(pool_id), &totals);
-        env.storage().persistent().extend_ttl(
-            &DataKey::PoolOutcomeTotals(pool_id),
-            POOL_BUMP_THRESHOLD,
-            POOL_BUMP_TARGET,
-        );
-
-        // Update UserBet and UserOutcomeBets with normalised amount.
         if outcome == 0 {
             user_bet.amount_a = user_bet
                 .amount_a
@@ -6713,13 +6661,9 @@ impl PredinexContract {
                     .unwrap_or(0);
                 let fee_t = deposit * fee_bps as i128 / 10_000;
                 if fee_t > 0 {
-                    let fee_key = DataKey::PoolTokenFeePending(pool_id, tok);
-                    env.storage().persistent().set(&fee_key, &fee_t);
-                    env.storage().persistent().extend_ttl(
-                        &fee_key,
-                        POOL_BUMP_THRESHOLD,
-                        POOL_BUMP_TARGET,
-                    );
+                    env.storage()
+                        .persistent()
+                        .set(&DataKey::PoolTokenFeePending(pool_id, tok), &fee_t);
                 }
             }
             payout_state.fee_credited = true;
@@ -6790,8 +6734,8 @@ impl PredinexContract {
                 if net_t <= 0 {
                     continue;
                 }
-                let token_bal = token::Client::new(&env, &tok)
-                    .balance(&env.current_contract_address());
+                let token_bal =
+                    token::Client::new(&env, &tok).balance(&env.current_contract_address());
                 let dust = if token_bal > fee_t {
                     token_bal - fee_t
                 } else {
@@ -6819,14 +6763,10 @@ impl PredinexContract {
         }
 
         let payout_key = DataKey::PoolPayoutState(pool_id);
+        env.storage().persistent().set(&payout_key, &payout_state);
         env.storage()
             .persistent()
-            .set(&payout_key, &payout_state);
-        env.storage().persistent().extend_ttl(
-            &payout_key,
-            POOL_BUMP_THRESHOLD,
-            POOL_BUMP_TARGET,
-        );
+            .extend_ttl(&payout_key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
 
         // Remove user's bet records to prevent double-claim.
         env.storage()
@@ -6898,17 +6838,10 @@ impl PredinexContract {
         caller.require_auth();
         Self::require_treasury_recipient(&env, &caller)?;
 
-        token::Client::new(&env, &token).transfer(
-            &env.current_contract_address(),
-            &to,
-            &amount,
-        );
+        token::Client::new(&env, &token).transfer(&env.current_contract_address(), &to, &amount);
 
         env.events().publish(
-            (
-                Symbol::new(&env, "tokens_rescued"),
-                event_version(&env),
-            ),
+            (Symbol::new(&env, "tokens_rescued"), event_version(&env)),
             (token, to, amount),
         );
 
@@ -6958,11 +6891,7 @@ impl PredinexContract {
         for i in 0..allowed.len() {
             let tok = allowed.get(i).unwrap();
             let fee_key = DataKey::PoolTokenFeePending(pool_id, tok.clone());
-            let fee_t: i128 = env
-                .storage()
-                .persistent()
-                .get(&fee_key)
-                .unwrap_or(0);
+            let fee_t: i128 = env.storage().persistent().get(&fee_key).unwrap_or(0);
             if fee_t > 0 {
                 // Transfer the token-denominated fee to the treasury recipient.
                 token::Client::new(&env, &tok).transfer(
@@ -7022,5 +6951,4 @@ impl PredinexContract {
 
         Ok(())
     }
-
 }

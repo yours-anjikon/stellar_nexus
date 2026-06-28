@@ -2,14 +2,18 @@
 extern crate std;
 use super::*;
 use soroban_sdk::String;
-use soroban_sdk::{testutils::Address as _, testutils::Events, testutils::Ledger, Address, Env, Val};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Events, testutils::Ledger, Address, Env, Val,
+};
 use std::format;
 
 fn xdr_topic_val(env: &Env, event: &soroban_sdk::xdr::ContractEvent, i: usize) -> Val {
     match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(env, &v0.topics[i]).unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(env, &v0.topics[i])
+        .unwrap(),
     }
 }
 
@@ -303,7 +307,10 @@ fn test_fee_config_requires_admin() {
         client.set_fee_config(&other_admin, &200u32, &fee_recipient);
     }));
 
-    assert!(result.is_err(), "Only the treasury recipient should update the fee config");
+    assert!(
+        result.is_err(),
+        "Only the treasury recipient should update the fee config"
+    );
 }
 
 #[test]
@@ -486,7 +493,11 @@ fn test_initialize_twice_panics() {
     // Second initialization must panic
     let other_token_admin = Address::generate(&env);
     let other_token_id = env.register_stellar_asset_contract_v2(other_token_admin.clone());
-    client.initialize(&other_token_id.address(), &other_token_admin, &other_token_admin);
+    client.initialize(
+        &other_token_id.address(),
+        &other_token_admin,
+        &other_token_admin,
+    );
 }
 
 /// After the rejected second `initialize`, the original token address must
@@ -510,7 +521,11 @@ fn test_initialize_idempotency_preserves_original_token() {
     let other_token_admin = Address::generate(&env);
     let other_token_id = env.register_stellar_asset_contract_v2(other_token_admin.clone());
     let _result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.initialize(&other_token_id.address(), &other_token_admin, &other_token_admin);
+        client.initialize(
+            &other_token_id.address(),
+            &other_token_admin,
+            &other_token_admin,
+        );
     }));
 
     // The original token should still be active — verify by placing a bet
@@ -1558,7 +1573,11 @@ fn g1_treasury_recipient_can_be_rotated() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
+    client.initialize(
+        &token_id.address(),
+        &original_recipient,
+        &original_recipient,
+    );
 
     // Verify original recipient is set
     let current = client
@@ -1591,7 +1610,11 @@ fn g2_unauthorized_cannot_rotate_treasury_recipient() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
+    client.initialize(
+        &token_id.address(),
+        &original_recipient,
+        &original_recipient,
+    );
 
     // Attempt rotation from unauthorized address
     let unauthorized = Address::generate(&env);
@@ -1614,7 +1637,11 @@ fn g3_after_rotation_only_new_recipient_can_withdraw() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
+    client.initialize(
+        &token_id.address(),
+        &original_recipient,
+        &original_recipient,
+    );
 
     // Create a pool and generate treasury fees
     let creator = Address::generate(&env);
@@ -1682,7 +1709,11 @@ fn g4_rotation_emits_event_with_old_and_new_addresses() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
+    client.initialize(
+        &token_id.address(),
+        &original_recipient,
+        &original_recipient,
+    );
 
     let new_recipient = Address::generate(&env);
     client.rotate_treasury_recipient(&original_recipient, &new_recipient);
@@ -1753,7 +1784,11 @@ fn h1_successful_withdrawal_emits_event() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // Generate treasury fees
     let creator = Address::generate(&env);
@@ -1808,7 +1843,11 @@ fn h2_failed_withdrawal_does_not_emit_event() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // Attempt to withdraw more than available
     client.withdraw_treasury(&treasury_recipient, &1000);
@@ -1828,7 +1867,11 @@ fn h3_unauthorized_withdrawal_does_not_emit_event() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // Attempt withdrawal from unauthorized address
     let unauthorized = Address::generate(&env);
@@ -1850,7 +1893,11 @@ fn h4_multiple_withdrawals_emit_separate_events() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // Generate treasury fees
     let creator = Address::generate(&env);
@@ -1909,7 +1956,11 @@ fn h5_withdrawal_event_includes_caller_and_recipient() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // Generate treasury fees
     let creator = Address::generate(&env);
@@ -1967,7 +2018,11 @@ fn test_settle_pool_event_includes_totals_and_fee() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -2027,7 +2082,11 @@ fn test_settle_pool_event_outcome_b_totals() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -2082,7 +2141,11 @@ fn test_create_pool_with_fee_transfers_correctly() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creation_fee = 500i128;
     client.set_creation_fee(&treasury_recipient, &creation_fee);
@@ -2130,7 +2193,11 @@ fn test_create_pool_no_fee_succeeds() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // No set_creation_fee call — defaults to 0
     assert_eq!(client.get_creation_fee(), 0);
@@ -2165,7 +2232,11 @@ fn test_set_creation_fee_unauthorized_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let attacker = Address::generate(&env);
     // Must panic with "Unauthorized"
@@ -2186,7 +2257,11 @@ fn test_set_creation_fee_negative_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     client.set_creation_fee(&treasury_recipient, &-1);
 }
@@ -2205,7 +2280,11 @@ fn test_creation_fee_exemption_skips_fee() {
     let token = token::Client::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creation_fee = 500i128;
     client.set_creation_fee(&treasury_recipient, &creation_fee);
@@ -2251,7 +2330,11 @@ fn test_creation_fee_exemption_revoked_charges_again() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creation_fee = 500i128;
     client.set_creation_fee(&treasury_recipient, &creation_fee);
@@ -2295,7 +2378,11 @@ fn test_set_creation_fee_exemption_unauthorized_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let attacker = Address::generate(&env);
     let account = Address::generate(&env);
@@ -2536,7 +2623,8 @@ fn test_set_volume_fee_tiers_event_and_clear() {
     // recent invocation only).
     let events = env.events().all();
     let last_event = events.events().last().expect("must emit an event");
-    let name: soroban_sdk::Symbol = soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 0)).unwrap();
+    let name: soroban_sdk::Symbol =
+        soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 0)).unwrap();
     assert_eq!(name, soroban_sdk::Symbol::new(&env, "fee_tiers_updated"));
 
     assert_eq!(client.get_volume_fee_tiers().len(), 1);
@@ -3354,7 +3442,11 @@ fn l3_loser_claim_leaves_balances_unchanged() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let winner = Address::generate(&env);
@@ -3423,7 +3515,11 @@ fn l4_successful_claim_reconciles_treasury_and_balances() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -3492,7 +3588,11 @@ fn l5_claim_winnings_emits_claim_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -3529,9 +3629,12 @@ fn l5_claim_winnings_emits_claim_event() {
 
     // Verify topics via XDR decoding
     // Topics: [claim_winnings, pool_id, user]
-    let topic0: soroban_sdk::Symbol = soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 0)).unwrap();
-    let topic1: u32 = soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 1)).unwrap();
-    let topic2: Address = soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 2)).unwrap();
+    let topic0: soroban_sdk::Symbol =
+        soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 0)).unwrap();
+    let topic1: u32 =
+        soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 1)).unwrap();
+    let topic2: Address =
+        soroban_sdk::TryFromVal::try_from_val(&env, &xdr_topic_val(&env, last_event, 2)).unwrap();
 
     assert_eq!(topic0, soroban_sdk::Symbol::new(&env, "claim_winnings"));
     assert_eq!(topic1, pool_id);
@@ -3539,11 +3642,14 @@ fn l5_claim_winnings_emits_claim_event() {
 
     // Verify payload is ClaimEvent
     let data_val: Val = match &last_event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(&env, &v0.data).unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
-    let claim_event: crate::ClaimEvent = soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
+    let claim_event: crate::ClaimEvent =
+        soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
 
     assert_eq!(claim_event.amount, winnings);
     assert_eq!(claim_event.winning_outcome, 0);
@@ -4098,7 +4204,8 @@ fn test_place_bet_with_referrer_emits_event() {
     let events = t.env.events().all();
     let found = events.events().iter().any(|event| {
         let topic0: soroban_sdk::Symbol =
-            soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, event, 0)).unwrap();
+            soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, event, 0))
+                .unwrap();
         topic0 == soroban_sdk::Symbol::new(&t.env, "referral_bet")
     });
     assert!(found, "referral_bet event must be emitted");
@@ -4115,7 +4222,8 @@ fn test_place_bet_without_referrer_no_referral_event() {
     let events = t.env.events().all();
     let found = events.events().iter().any(|event| {
         let topic0: soroban_sdk::Symbol =
-            soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, event, 0)).unwrap();
+            soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, event, 0))
+                .unwrap();
         topic0 == soroban_sdk::Symbol::new(&t.env, "referral_bet")
     });
     assert!(
@@ -4631,7 +4739,7 @@ fn h1_double_fee_fix_treasury_correct_with_multiple_winners() {
 
     client.place_bet(&winner1, &pool_id, &0, &300, &None::<Address>); // 300 on A
     client.place_bet(&winner2, &pool_id, &0, &100, &None::<Address>); // 100 on A
-    client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>);   // 200 on B, loses
+    client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>); // 200 on B, loses
 
     env.ledger().with_mut(|l| l.timestamp = 3601);
     client.settle_pool(&token_admin, &pool_id, &0);
@@ -4648,7 +4756,10 @@ fn h1_double_fee_fix_treasury_correct_with_multiple_winners() {
     // Treasury must hold exactly the fee (user-proportional fee sums to total_fee)
     let treasury = client.get_treasury_balance();
     // w1 fee = 300*12/400 = 9. w2 fee = 100*12/400 = 3. Total = 12.
-    assert_eq!(treasury, 12i128, "treasury must equal exactly 2% of total pool");
+    assert_eq!(
+        treasury, 12i128,
+        "treasury must equal exactly 2% of total pool"
+    );
 }
 
 /// M1: create_pool emits an event with correct topics and payload.
@@ -4664,7 +4775,11 @@ fn m1_create_pool_emits_pool_created_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4692,12 +4807,11 @@ fn m1_create_pool_emits_pool_created_event() {
     assert_eq!(topic1, pool_id);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::CreatePoolEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -4723,7 +4837,11 @@ fn m2_place_bet_emits_bet_placed_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -4760,15 +4878,13 @@ fn m2_place_bet_emits_bet_placed_event() {
     assert_eq!(topic3, user);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
-    let payload: crate::BetEvent =
-        soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
+    let payload: crate::BetEvent = soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
 
     assert_eq!(payload.outcome, 0);
     assert_eq!(payload.amount, 500);
@@ -4790,7 +4906,11 @@ fn m3_settle_pool_emits_settle_pool_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4828,12 +4948,11 @@ fn m3_settle_pool_emits_settle_pool_event() {
     assert_eq!(topic2, pool_id);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::SettlePoolEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -4860,7 +4979,11 @@ fn m4_claim_winnings_emits_claim_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4903,12 +5026,11 @@ fn m4_claim_winnings_emits_claim_event() {
     assert_eq!(topic2, user);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::ClaimEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -4934,7 +5056,11 @@ fn m5_cancel_bet_emits_bet_cancelled_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -4973,12 +5099,11 @@ fn m5_cancel_bet_emits_bet_cancelled_event() {
     assert_eq!(topic3, user);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::BetCancelledEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -5002,7 +5127,11 @@ fn m6_extend_pool_duration_emits_pool_duration_extended_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -5041,12 +5170,11 @@ fn m6_extend_pool_duration_emits_pool_duration_extended_event() {
     assert_eq!(topic2, pool_id);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::PoolDurationExtendedEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -5069,7 +5197,11 @@ fn m7_place_bet_with_referrer_emits_referral_bet_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -5106,12 +5238,11 @@ fn m7_place_bet_with_referrer_emits_referral_bet_event() {
     assert_eq!(topic2, pool_id);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::ReferralBetEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -5136,7 +5267,11 @@ fn m8_claim_referral_rewards_emits_referral_reward_claimed_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     // Enable referral rewards: 100 bps = 1%
     client.set_referral_bps(&treasury_recipient, &100);
@@ -5178,12 +5313,11 @@ fn m8_claim_referral_rewards_emits_referral_reward_claimed_event() {
     assert_eq!(topic1, soroban_sdk::Symbol::new(&env, EVENT_SCHEMA_VERSION));
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::ReferralRewardClaimedEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -5206,7 +5340,11 @@ fn m9_update_twap_emits_twap_updated_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
+    client.initialize(
+        &token_id.address(),
+        &treasury_recipient,
+        &treasury_recipient,
+    );
 
     env.ledger().with_mut(|li| li.timestamp = 1000);
 
@@ -5252,12 +5390,11 @@ fn m9_update_twap_emits_twap_updated_event() {
     assert_eq!(topic2, pool_id);
 
     let data_val: Val = match &event.body {
-        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
-            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
-                &env, &v0.data,
-            )
-            .unwrap()
-        }
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => <Val as soroban_sdk::TryFromVal<
+            Env,
+            soroban_sdk::xdr::ScVal,
+        >>::try_from_val(&env, &v0.data)
+        .unwrap(),
     };
     let payload: crate::TwapUpdatedEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
@@ -5526,7 +5663,8 @@ fn n4_get_user_claim_history_pagination() {
         client.place_bet(&user, &pool_id, &0, &500, &None::<Address>);
         client.place_bet(&opponent, &pool_id, &1, &500, &None::<Address>);
 
-        env.ledger().with_mut(|li| li.timestamp = 4000 + (i as u64) * 100);
+        env.ledger()
+            .with_mut(|li| li.timestamp = 4000 + (i as u64) * 100);
         client.settle_pool(&creator, &pool_id, &0);
         client.claim_winnings(&user, &pool_id);
     }

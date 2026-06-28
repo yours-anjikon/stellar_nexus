@@ -43,8 +43,7 @@ fn setup_ma() -> MaEnv<'static> {
     let client: PredinexContractClient<'static> = unsafe { core::mem::transmute(client) };
     let base_admin: token::StellarAssetClient<'static> =
         unsafe { core::mem::transmute(base_admin) };
-    let alt_admin: token::StellarAssetClient<'static> =
-        unsafe { core::mem::transmute(alt_admin) };
+    let alt_admin: token::StellarAssetClient<'static> = unsafe { core::mem::transmute(alt_admin) };
     let env: Env = unsafe { core::mem::transmute(env) };
 
     MaEnv {
@@ -89,18 +88,26 @@ fn ma_1_create_multi_asset_pool_stores_allowed_tokens() {
     let creator = Address::generate(&t.env);
 
     // Set exchange rates for both tokens (10_000 bps = 1:1 with base).
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
-    let allowed = t.client.get_pool_allowed_tokens(&pool_id).expect("tokens must be stored");
+    let allowed = t
+        .client
+        .get_pool_allowed_tokens(&pool_id)
+        .expect("tokens must be stored");
     assert_eq!(allowed.len(), 2, "two tokens should be allowed");
     assert!(allowed.contains(&t.base_token));
     assert!(allowed.contains(&t.alt_token));
 
     // Exchange rates are readable.
-    assert_eq!(t.client.get_token_exchange_rate(&t.base_token), Some(10_000));
+    assert_eq!(
+        t.client.get_token_exchange_rate(&t.base_token),
+        Some(10_000)
+    );
     assert_eq!(t.client.get_token_exchange_rate(&t.alt_token), Some(5_000));
 }
 
@@ -111,9 +118,11 @@ fn ma_2_place_bet_with_supported_token_succeeds() {
     let creator = Address::generate(&t.env);
     let user = Address::generate(&t.env);
 
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
     // 1 alt-token = 0.5 base tokens.
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
@@ -145,15 +154,18 @@ fn ma_3_place_bet_with_unsupported_token_fails() {
     let creator = Address::generate(&t.env);
     let user = Address::generate(&t.env);
 
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
     // Register a third token with a rate, but do NOT add it to the pool.
     let third_token_asset = t.env.register_stellar_asset_contract_v2(t.treasury.clone());
     let third_token = third_token_asset.address();
-    t.client.set_token_exchange_rate(&t.treasury, &third_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &third_token, &10_000i128);
 
     let third_admin = token::StellarAssetClient::new(&t.env, &third_token);
     third_admin.mint(&user, &100i128);
@@ -174,12 +186,14 @@ fn ma_3_place_bet_with_unsupported_token_fails() {
 fn ma_4_place_bet_without_exchange_rate_fails() {
     let t = setup_ma();
     let creator = Address::generate(&t.env);
-    let user = Address::generate(&t.env);
+    let _user = Address::generate(&t.env);
 
     // Set rate for base but NOT for alt before pool creation — pool creation
     // should fail since all tokens need a rate at creation time.
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
@@ -228,21 +242,33 @@ fn ma_5_two_token_pool_settle_winner_receives_both_tokens() {
 
     // 1 base-token = 1 base unit (rate 10_000).
     // 1 alt-token = 1 base unit (rate 10_000) for simple math in this test.
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &10_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
     // user_a bets 100 base tokens on outcome 0.
     t.base_admin.mint(&user_a, &100i128);
     t.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &100i128, &t.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &100i128,
+        &t.base_token,
+        &None::<Address>,
     );
 
     // user_b bets 200 alt tokens on outcome 1.
     t.alt_admin.mint(&user_b, &200i128);
     t.client.place_multi_asset_bet(
-        &user_b, &pool_id, &1u32, &200i128, &t.alt_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &1u32,
+        &200i128,
+        &t.alt_token,
+        &None::<Address>,
     );
 
     // total normalised = 300, fee 2% = 6, net = 294.
@@ -268,36 +294,59 @@ fn ma_6_per_token_min_max_bet_enforced() {
     let creator = Address::generate(&t.env);
     let user = Address::generate(&t.env);
 
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &10_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
     // Set per-token limits for alt: min = 100, max = 500.
-    t.client.set_pool_token_bet_limits(&t.treasury, &pool_id, &t.alt_token, &100i128, &500i128);
+    t.client
+        .set_pool_token_bet_limits(&t.treasury, &pool_id, &t.alt_token, &100i128, &500i128);
 
     t.alt_admin.mint(&user, &1_000i128);
 
     // Below minimum.
     let low = t.client.try_place_multi_asset_bet(
-        &user, &pool_id, &0u32, &99i128, &t.alt_token, &None::<Address>,
+        &user,
+        &pool_id,
+        &0u32,
+        &99i128,
+        &t.alt_token,
+        &None::<Address>,
     );
     assert_eq!(low, Err(Ok(ContractError::BetBelowMinBet)));
 
     // Above maximum.
     let high = t.client.try_place_multi_asset_bet(
-        &user, &pool_id, &0u32, &501i128, &t.alt_token, &None::<Address>,
+        &user,
+        &pool_id,
+        &0u32,
+        &501i128,
+        &t.alt_token,
+        &None::<Address>,
     );
     assert_eq!(high, Err(Ok(ContractError::BetAboveMaxBet)));
 
     // Exactly at minimum succeeds.
     t.client.place_multi_asset_bet(
-        &user, &pool_id, &0u32, &100i128, &t.alt_token, &None::<Address>,
+        &user,
+        &pool_id,
+        &0u32,
+        &100i128,
+        &t.alt_token,
+        &None::<Address>,
     );
 
     // Exactly at maximum succeeds.
     t.client.place_multi_asset_bet(
-        &user, &pool_id, &0u32, &500i128, &t.alt_token, &None::<Address>,
+        &user,
+        &pool_id,
+        &0u32,
+        &500i128,
+        &t.alt_token,
+        &None::<Address>,
     );
 }
 
@@ -309,8 +358,10 @@ fn ma_7_collect_fees_transfers_pending_fees_to_treasury() {
     let user_a = Address::generate(&t.env);
     let user_b = Address::generate(&t.env);
 
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &10_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
@@ -318,10 +369,20 @@ fn ma_7_collect_fees_transfers_pending_fees_to_treasury() {
     t.alt_admin.mint(&user_b, &500i128);
 
     t.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &500i128, &t.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &500i128,
+        &t.base_token,
+        &None::<Address>,
     );
     t.client.place_multi_asset_bet(
-        &user_b, &pool_id, &1u32, &500i128, &t.alt_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &1u32,
+        &500i128,
+        &t.alt_token,
+        &None::<Address>,
     );
 
     // total normalised = 1000, fee 2% = 20 (10 from each token).
@@ -362,21 +423,33 @@ fn ma_8_collect_fees_updates_treasury_ledger() {
     let user_b = Address::generate(&t.env);
 
     // Exchange rates: 1 base = 1 base unit, 1 alt = 0.5 base units.
-    t.client.set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
-    t.client.set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.base_token, &10_000i128);
+    t.client
+        .set_token_exchange_rate(&t.treasury, &t.alt_token, &5_000i128);
 
     let pool_id = make_ma_pool(&t, &creator);
 
     // user_a bets 500 base tokens (normalized: 500).
     t.base_admin.mint(&user_a, &500i128);
     t.client.place_multi_asset_bet(
-        &user_a, &pool_id, &0u32, &500i128, &t.base_token, &None::<Address>,
+        &user_a,
+        &pool_id,
+        &0u32,
+        &500i128,
+        &t.base_token,
+        &None::<Address>,
     );
 
     // user_b bets 600 alt tokens (normalized: 600 × 0.5 = 300).
     t.alt_admin.mint(&user_b, &600i128);
     t.client.place_multi_asset_bet(
-        &user_b, &pool_id, &1u32, &600i128, &t.alt_token, &None::<Address>,
+        &user_b,
+        &pool_id,
+        &1u32,
+        &600i128,
+        &t.alt_token,
+        &None::<Address>,
     );
 
     // Total normalized = 800, fee 2% = 16.
@@ -387,7 +460,7 @@ fn ma_8_collect_fees_updates_treasury_ledger() {
 
     // Read treasury balance before fee collection.
     let treasury_before = t.client.get_treasury_balance();
-    let pool_revenue_before = t.client.get_pool_protocol_revenue(&pool_id);
+    let _pool_revenue_before = t.client.get_pool_protocol_revenue(&pool_id);
 
     // First claim populates PoolTokenFeePending.
     t.client.claim_multi_asset_winnings(&user_a, &pool_id);
@@ -395,8 +468,7 @@ fn ma_8_collect_fees_updates_treasury_ledger() {
     // get_pool_protocol_revenue should now show pending fees (even though not yet collected).
     let pool_revenue_pending = t.client.get_pool_protocol_revenue(&pool_id);
     assert_eq!(
-        pool_revenue_pending.treasury_credited,
-        16,
+        pool_revenue_pending.treasury_credited, 16,
         "get_pool_protocol_revenue should include pending fees"
     );
 
@@ -416,15 +488,13 @@ fn ma_8_collect_fees_updates_treasury_ledger() {
 
     // Verify PoolTreasuryCredited was updated and still shows 16 (no double-counting).
     assert_eq!(
-        pool_revenue_after.treasury_credited,
-        16,
+        pool_revenue_after.treasury_credited, 16,
         "PoolTreasuryCredited should track the normalized fee"
     );
 
     // Verify the fee was only credited once (not double-counted).
     assert_eq!(
-        pool_revenue_pending.treasury_credited,
-        pool_revenue_after.treasury_credited,
+        pool_revenue_pending.treasury_credited, pool_revenue_after.treasury_credited,
         "Pending and collected amounts should match (no double-counting)"
     );
 }
