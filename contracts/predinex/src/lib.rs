@@ -207,6 +207,9 @@ pub enum DataKey {
     UserTotalClaimed(Address),
     /// Claim history entries for a user (capped ring buffer).
     UserClaimHistory(Address),
+    /// #625 — Pending rescue request waiting out the 24-hour timelock.
+    /// Value: (token: Address, to: Address, amount: i128, not_before: u64)
+    PendingRescue,
 }
 
 // #189 — TTL bump policy for persistent storage entries.
