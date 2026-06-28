@@ -4369,7 +4369,7 @@ impl PredinexContract {
         {
             let mut pending_normalized: i128 = 0;
             for i in 0..allowed.len() {
-                let tok = allowed.get(i).unwrap();
+                let tok = allowed.get(i).ok_or(ContractError::PoolNotFound)?;
                 let fee_t: i128 = env
                     .storage()
                     .persistent()
@@ -6115,9 +6115,9 @@ impl PredinexContract {
         // Dedup check and exchange-rate presence check.
         let mut seen: Vec<Address> = Vec::new(&env);
         for i in 0..allowed_tokens.len() {
-            let tok = allowed_tokens.get(i).unwrap();
+            let tok = allowed_tokens.get(i).ok_or(ContractError::PoolNotFound)?;
             for j in 0..seen.len() {
-                if seen.get(j).unwrap() == tok {
+                if seen.get(j).ok_or(ContractError::PoolNotFound)? == tok {
                     return Err(ContractError::DuplicateToken);
                 }
             }
@@ -6260,7 +6260,7 @@ impl PredinexContract {
             .ok_or(ContractError::PoolNotFound)?;
         let mut token_allowed = false;
         for i in 0..allowed.len() {
-            if allowed.get(i).unwrap() == bet_token {
+            if allowed.get(i).ok_or(ContractError::PoolNotFound)? == bet_token {
                 token_allowed = true;
                 break;
             }
@@ -6705,7 +6705,7 @@ impl PredinexContract {
         let is_first_claim = !payout_state.fee_credited;
         if is_first_claim {
             for i in 0..allowed.len() {
-                let tok = allowed.get(i).unwrap();
+                let tok = allowed.get(i).ok_or(ContractError::PoolNotFound)?;
                 let deposit: i128 = env
                     .storage()
                     .persistent()
@@ -6728,7 +6728,7 @@ impl PredinexContract {
         // Payout: user receives (net_T × user_norm / total_norm_winning) of each token.
         let mut total_norm_paid: i128 = 0;
         for i in 0..allowed.len() {
-            let tok = allowed.get(i).unwrap();
+            let tok = allowed.get(i).ok_or(ContractError::PoolNotFound)?;
             let deposit: i128 = env
                 .storage()
                 .persistent()
@@ -6775,7 +6775,7 @@ impl PredinexContract {
                 .get(&DataKey::TreasuryRecipient)
                 .ok_or(ContractError::NotInitialized)?;
             for i in 0..allowed.len() {
-                let tok = allowed.get(i).unwrap();
+                let tok = allowed.get(i).ok_or(ContractError::PoolNotFound)?;
                 let deposit: i128 = env
                     .storage()
                     .persistent()
@@ -6956,7 +6956,7 @@ impl PredinexContract {
         let mut total_normalized_fee: i128 = 0;
 
         for i in 0..allowed.len() {
-            let tok = allowed.get(i).unwrap();
+            let tok = allowed.get(i).ok_or(ContractError::PoolNotFound)?;
             let fee_key = DataKey::PoolTokenFeePending(pool_id, tok.clone());
             let fee_t: i128 = env
                 .storage()
