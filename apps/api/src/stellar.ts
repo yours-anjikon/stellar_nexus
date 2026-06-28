@@ -15,13 +15,10 @@ export const oracleKeypair = env.ORACLE_STELLAR_SECRET
   ? Keypair.fromSecret(env.ORACLE_STELLAR_SECRET)
   : platformKeypair;
 
-/** Collect all configured admin keypairs for multi-signer oracle updates. */
-export function getOracleSignerKeypairs(count: number): Keypair[] {
-  const kps: Keypair[] = [platformKeypair];
-  if (count >= 2 && env.ADMIN_2_SECRET) kps.push(Keypair.fromSecret(env.ADMIN_2_SECRET));
-  if (count >= 3 && env.ADMIN_3_SECRET) kps.push(Keypair.fromSecret(env.ADMIN_3_SECRET));
-  return kps;
-}
+// #332 — emergency oracle override role
+export const emergencyOracleKeypair = env.EMERGENCY_ADMIN_SECRET
+  ? Keypair.fromSecret(env.EMERGENCY_ADMIN_SECRET)
+  : platformKeypair;
 
 export const sorobanRpcCallsTotal = new client.Counter({
   name: "soroban_rpc_calls_total",
@@ -136,7 +133,22 @@ export async function getBondOnChain(stellarAddress: string): Promise<string> {
 /**
  * Retrieves the required_collateral for an importer address from the contract.
  */
-export async function getRequiredCollateralOnChain(stellarAddress: string): Promise<string> {
-  const acct = await contractClient.getAccount(stellarAddress);
-  return acct.requiredCollateral.toString();
+export async function getBondOnChain(stellarAddress: string): Promise<string> {
+  // Use the contractClient proxy which already has metric instrumentation
+  const account = await contractClient.getAccount(stellarAddress);
+  return account.collateralBalance.toString();
+}
+
+/**
+ * Emergency override for collateral requirements, bypassing staleness and rate limits (#332).
+ */
+export async function emergencySetRequiredCollateral(importer: string, newRequired: bigint): Promise<void> {
+  await contractClient.setRequiredCollateral(
+    emergencyOracleKeypair,
+    importer,
+    newRequired,
+    undefined,
+    true, // bypassRateLimit
+    true, // emergency
+  );
 }

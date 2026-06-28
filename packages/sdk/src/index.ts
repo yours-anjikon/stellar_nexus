@@ -124,8 +124,10 @@ export class TariffShieldClient {
     newRequired: bigint,
     priceOracleContract?: string,
     bypassRateLimit?: boolean,
+    emergency?: boolean,
   ): Promise<InvokeResult<null>> {
     const args = [
+      addressToScVal(signer.publicKey()),
       addressToScVal(importer),
       nativeToScVal(newRequired, { type: "i128" }),
     ];
@@ -137,6 +139,7 @@ export class TariffShieldClient {
     }
 
     args.push(nativeToScVal(bypassRateLimit ?? false, { type: "bool" }));
+    args.push(nativeToScVal(emergency ?? false, { type: "bool" }));
 
     return this.invokeAndSubmit(signer, "set_required_collateral", args);
   }

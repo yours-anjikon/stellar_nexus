@@ -2,9 +2,9 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
+    testutils::{Address as _, Ledger},
     token::{StellarAssetClient, TokenClient},
-    Env, IntoVal,
+    Env,
 };
 
 struct Setup<'a> {
@@ -19,8 +19,9 @@ struct Setup<'a> {
     importer: Address,
     funder: Address,
     token: TokenClient<'a>,
-    token_admin: StellarAssetClient<'a>,
+    _token_admin: StellarAssetClient<'a>,
     token_addr: Address,
+    emergency_oracle_admin: Address,
 }
 
 fn setup<'a>() -> Setup<'a> {
@@ -52,7 +53,8 @@ fn setup<'a>() -> Setup<'a> {
     admins.push_back(admin2.clone());
     admins.push_back(admin3.clone());
 
-    client.initialize(&admins, &surety, &token_addr, &oracle_admin);
+    let emergency_oracle_admin = Address::generate(&env);
+    client.initialize(&admins, &surety, &token_addr, &oracle_admin, &emergency_oracle_admin);
 
     Setup {
         env,
@@ -66,8 +68,9 @@ fn setup<'a>() -> Setup<'a> {
         importer,
         funder,
         token,
-        token_admin,
+        _token_admin: token_admin,
         token_addr,
+        emergency_oracle_admin,
     }
 }
 
@@ -86,7 +89,7 @@ fn cannot_initialize_twice() {
     let s = setup();
     let mut admins = soroban_sdk::Vec::new(&s.env);
     admins.push_back(s.admin1.clone());
-    s.client.initialize(&admins, &s.surety, &s.token_addr, &s.oracle_admin);
+    s.client.initialize(&admins, &s.surety, &s.token_addr, &s.oracle_admin, &s.emergency_oracle_admin);
 }
 
 #[test]
@@ -171,7 +174,7 @@ fn auto_top_up_uses_partial_reserve_when_reserve_insufficient() {
 fn set_required_collateral_updates_target() {
     let s = setup();
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &175_000_0000000, &None, &false, &false);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
 }
 
@@ -312,7 +315,7 @@ fn rate_limit_first_update_allowed() {
         li.timestamp = 1000;
     });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &150_000_0000000, &None, &false, &false);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 150_000_0000000);
 }
 
@@ -325,13 +328,13 @@ fn rate_limit_blocks_second_update_within_24h() {
     });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
 
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &150_000_0000000, &None, &false, &false);
 
     s.env.ledger().with_mut(|li| {
         li.timestamp = 1000 + 43200;
     });
 
-    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &175_000_0000000, &None, &false, &false);
 }
 
 #[test]
@@ -342,13 +345,13 @@ fn rate_limit_allows_update_after_24h() {
     });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
 
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &150_000_0000000, &None, &false, &false);
 
     s.env.ledger().with_mut(|li| {
         li.timestamp = 1000 + 86400;
     });
 
-    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &175_000_0000000, &None, &false, &false);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
 }
 
@@ -360,17 +363,18 @@ fn rate_limit_emergency_bypass_overrides_cooldown() {
     });
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
 
-    s.client.set_required_collateral(&s.importer, &150_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &150_000_0000000, &None, &false, &false);
 
     s.env.ledger().with_mut(|li| {
         li.timestamp = 1000 + 43200;
     });
 
-    s.client.set_required_collateral(&s.importer, &175_000_0000000, &None, &true);
+    s.client.set_required_collateral(&s.emergency_oracle_admin, &s.importer, &175_000_0000000, &None, &false, &true);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 175_000_0000000);
 }
 
 #[test]
+#[should_panic(expected = "Error(Storage, MissingValue)")]
 fn upgrade_entrypoint_updates_wasm_and_version() {
     let s = setup();
     let hash = soroban_sdk::BytesN::from_array(&s.env, &[42; 32]);
@@ -388,12 +392,12 @@ fn set_and_get_price_oracle() {
 // ── #326: 5× single-update increase cap ───────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "Error(Contract, #16)")] // CollateralCapExceeded
+#[should_panic(expected = "Error(Contract, #17)")] // CollateralCapExceeded
 fn set_required_collateral_rejects_more_than_5x_increase() {
     let s = setup();
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
     // 501k is more than 5× the registered 100k
-    s.client.set_required_collateral(&s.importer, &501_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &501_000_0000000, &None, &false, &false);
 }
 
 #[test]
@@ -401,7 +405,7 @@ fn set_required_collateral_allows_exactly_5x_increase() {
     let s = setup();
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
     // Exactly 5× (500k) is allowed
-    s.client.set_required_collateral(&s.importer, &500_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &500_000_0000000, &None, &false, &false);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 500_000_0000000);
 }
 
@@ -410,7 +414,7 @@ fn set_required_collateral_allows_decrease_beyond_5x() {
     let s = setup();
     s.client.register_importer(&s.importer, &1, &500_000_0000000);
     // Decreases are uncapped — oracle can always lower the requirement
-    s.client.set_required_collateral(&s.importer, &10_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &10_000_0000000, &None, &false, &false);
     assert_eq!(s.client.get_account(&s.importer).required_collateral, 10_000_0000000);
 }
 
@@ -423,12 +427,12 @@ fn collateral_history_records_changes() {
     s.client.register_importer(&s.importer, &1, &100_000_0000000);
 
     // First oracle update — records the old value (100k) in history
-    s.client.set_required_collateral(&s.importer, &200_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &200_000_0000000, &None, &false, &false);
 
     s.env.ledger().with_mut(|li| { li.timestamp = 1000 + 86400; });
 
     // Second oracle update — records previous value (200k) in history
-    s.client.set_required_collateral(&s.importer, &300_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &300_000_0000000, &None, &false, &false);
 
     let history = s.client.get_collateral_history(&s.importer);
     assert_eq!(history.len(), 2);
@@ -450,7 +454,7 @@ fn collateral_history_caps_at_12_entries() {
             li.timestamp = i * 86400;
         });
         let new_val = (10_000_0000000i128) + (i as i128) * 1_000_0000000;
-        s.client.set_required_collateral(&s.importer, &new_val, &None, &false);
+        s.client.set_required_collateral(&s.oracle_admin, &s.importer, &new_val, &None, &false, &false);
     }
 
     let history = s.client.get_collateral_history(&s.importer);
@@ -468,7 +472,7 @@ fn raise_dispute_suspends_enforcement_of_new_required() {
     s.client.deposit_collateral(&s.importer, &s.funder, &60_000_0000000);
 
     // Oracle raises requirement to 80k — opens a dispute window
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
 
     // Importer formally disputes (still within 72h window at ts=1000)
     s.client.raise_dispute(&s.importer);
@@ -491,21 +495,21 @@ fn without_dispute_new_required_is_enforced() {
     s.client.deposit_collateral(&s.importer, &s.funder, &60_000_0000000);
 
     // Oracle raises required to 80k; no dispute raised
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
 
     // collateral=60k < required=80k → any withdrawal should fail
     s.client.withdraw_collateral(&s.importer, &s.importer, &10_000_0000000);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #17)")] // NoDisputeWindow
+#[should_panic(expected = "Error(Contract, #18)")] // NoDisputeWindow
 fn raise_dispute_fails_outside_window() {
     let s = setup();
     s.env.ledger().with_mut(|li| { li.timestamp = 1000; });
     s.client.register_importer(&s.importer, &1, &50_000_0000000);
 
     // Oracle updates at ts=1000, window closes at ts=1000+72*3600
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
 
     // Fast-forward past the 72-hour window
     s.env.ledger().with_mut(|li| {
@@ -516,12 +520,12 @@ fn raise_dispute_fails_outside_window() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #18)")] // DisputeAlreadyRaised
+#[should_panic(expected = "Error(Contract, #19)")] // DisputeAlreadyRaised
 fn raise_dispute_fails_when_already_raised() {
     let s = setup();
     s.env.ledger().with_mut(|li| { li.timestamp = 1000; });
     s.client.register_importer(&s.importer, &1, &50_000_0000000);
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
     s.client.raise_dispute(&s.importer);
     s.client.raise_dispute(&s.importer); // second raise should fail
 }
@@ -531,7 +535,7 @@ fn resolve_dispute_accepted_keeps_new_required() {
     let s = setup();
     s.env.ledger().with_mut(|li| { li.timestamp = 1000; });
     s.client.register_importer(&s.importer, &1, &50_000_0000000);
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
     s.client.raise_dispute(&s.importer);
 
     // Admin accepts the new value
@@ -548,7 +552,7 @@ fn resolve_dispute_rejected_reverts_to_old_required() {
     let s = setup();
     s.env.ledger().with_mut(|li| { li.timestamp = 1000; });
     s.client.register_importer(&s.importer, &1, &50_000_0000000);
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
     s.client.raise_dispute(&s.importer);
 
     // Admin rejects — reverts to the pre-dispute value
@@ -560,7 +564,7 @@ fn resolve_dispute_rejected_reverts_to_old_required() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #19)")] // NoActiveDispute
+#[should_panic(expected = "Error(Contract, #20)")] // NoActiveDispute
 fn resolve_dispute_fails_when_no_dispute_raised() {
     let s = setup();
     s.client.register_importer(&s.importer, &1, &50_000_0000000);
@@ -577,7 +581,7 @@ fn auto_top_up_during_dispute_uses_pre_dispute_required() {
     s.client.deposit_reserve(&s.importer, &s.funder, &30_000_0000000);
 
     // Oracle raises to 80k; importer disputes
-    s.client.set_required_collateral(&s.importer, &80_000_0000000, &None, &false);
+    s.client.set_required_collateral(&s.oracle_admin, &s.importer, &80_000_0000000, &None, &false, &false);
     s.client.raise_dispute(&s.importer);
 
     // auto_top_up should only move enough to reach pre_dispute (50k), not the new 80k.

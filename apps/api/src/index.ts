@@ -13,6 +13,7 @@ import { authRouter } from "./routes/auth.js";
 import { importersRouter } from "./routes/importers.js";
 import { adminRouter } from "./routes/admin.js";
 import { privacyRouter } from "./routes/privacy.js";
+import { tosRouter } from "./routes/tos.js";
 import { bondSignaturesRouter, bondWebhookRouter } from "./routes/bond-signatures.js";
 import { startIndexer } from "./indexer.js";
 import { ping } from "./db.js";
@@ -356,6 +357,7 @@ app.use("/importers", kycRouter);
 app.use("/compliance", complianceRouter);
 app.use("/admin", adminRouter);
 app.use("/account", privacyRouter);
+app.use("/account", tosRouter);
 app.use("/privacy", privacyRouter);
 app.use("/surety-license", suretyLicenseRouter);
 app.use("/bonds", bondWebhookRouter);   // unauthenticated DocuSign webhook
