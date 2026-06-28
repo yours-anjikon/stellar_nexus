@@ -121,9 +121,17 @@ export async function pingRpc(): Promise<void> {
 }
 
 /**
- * Retrieves the current balance for a bond directly from the Soroban contract.
- * @param bondId The unique identifier for the bond.
- * @returns The on-chain balance as a string.
+ * Retrieves the current collateral balance for a bond directly from the Soroban contract.
+ * @param stellarAddress The importer's Stellar address.
+ * @returns The on-chain collateral balance as a string.
+ */
+export async function getBondOnChain(stellarAddress: string): Promise<string> {
+  const acct = await contractClient.getAccount(stellarAddress);
+  return acct.collateralBalance.toString();
+}
+
+/**
+ * Retrieves the required_collateral for an importer address from the contract.
  */
 export async function getBondOnChain(stellarAddress: string): Promise<string> {
   // Use the contractClient proxy which already has metric instrumentation
