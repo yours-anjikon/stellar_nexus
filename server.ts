@@ -54,7 +54,7 @@ import {
 } from "./shared/agent-state.ts";
 import { checkWalletBalance, formatResult } from "./shared/wallet-balance.ts";
 import { appendAuditEntry, auditRouter } from "./shared/audit-log.ts";
-import { rateLimiters } from "./shared/rate-limit.ts";
+import { rateLimiters, perRouteLimiters, concurrentRequestsMiddleware } from "./shared/rate-limit.ts";
 import { agentQueue } from "./shared/agent-queue.ts";
 
 // Agent tools
@@ -520,7 +520,7 @@ applyX402Middleware(
   },
 );
 
-app.get("/pharmacy/compare", (req, res) => {
+app.get("/pharmacy/compare", perRouteLimiters.pharmacyCompare, concurrentRequestsMiddleware("pharmacy_compare"), (req, res) => {
   const parsedQuery = PharmacyCompareQuerySchema.safeParse({
     drug: req.query.drug,
     dosage: req.query.dosage,
@@ -746,7 +746,7 @@ applyX402Middleware(app, {
   },
 });
 
-app.post("/bill/audit", (req, res) => {
+app.post("/bill/audit", perRouteLimiters.billAudit, concurrentRequestsMiddleware("bill_audit"), (req, res) => {
   try {
     const validatedBody = validateBillAuditRequest(req.body);
     const sanitizedLineItems = validatedBody.lineItems.map((lineItem) => ({
@@ -788,7 +788,7 @@ applyX402Middleware(app, {
   },
 });
 
-app.get("/drug/interactions", (req, res) => {
+app.get("/drug/interactions", perRouteLimiters.drugInteractions, concurrentRequestsMiddleware("drug_interactions"), (req, res) => {
   const parsedQuery = DrugInteractionsQuerySchema.safeParse({
     meds: req.query.meds,
   });
@@ -849,7 +849,7 @@ app.get("/pharmacy/orders", (_req, res) => {
   res.json({ orders: loadOrders() });
 });
 
-app.post("/pharmacy/order", async (req, res) => {
+app.post("/pharmacy/order", perRouteLimiters.pharmacyOrder, concurrentRequestsMiddleware("pharmacy_order"), async (req, res) => {
   const parsedOrder = MedicationOrderSchema.safeParse(req.body);
   if (!parsedOrder.success) {
     res.status(400).json({
@@ -1196,7 +1196,7 @@ app.post("/agent/reset", (_req, res) => {
   res.json({ success: true });
 });
 
-app.post("/agent/run", async (req, res) => {
+app.post("/agent/run", perRouteLimiters.agentRun, concurrentRequestsMiddleware("agent_run"), async (req, res) => {
   const validation = validateTask(req.body?.task);
   if (!validation.ok) {
     res.status(400).json({ error: validation.error });
