@@ -539,6 +539,7 @@ function normalizePool(raw: RawSorobanPool | null, poolId: number): Pool | null 
     winningOutcome,
     expiry: toNumber(raw.expiry),
     status,
+    participant_count: raw.participant_count ?? 0,
   };
 }
 

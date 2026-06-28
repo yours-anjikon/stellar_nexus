@@ -49,6 +49,10 @@ export interface Pool {
     winningOutcome: number | undefined;
     expiry: number;
     status: 'active' | 'settled' | 'expired';
+    /**
+     * Number of unique participants who have bet in this pool.
+     */
+    participant_count?: number;
 }
 
 /**

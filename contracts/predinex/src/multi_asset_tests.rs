@@ -34,7 +34,7 @@ fn setup_ma() -> MaEnv<'static> {
 
     let contract_id = env.register(PredinexContract, ());
     let client: PredinexContractClient<'static> = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&base_asset.address(), &treasury);
+    client.initialize(&base_asset.address(), &treasury, &treasury);
 
     let base_admin: token::StellarAssetClient<'static> =
         token::StellarAssetClient::new(&env, &base_asset.address());

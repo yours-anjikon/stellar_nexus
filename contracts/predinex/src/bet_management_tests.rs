@@ -55,7 +55,7 @@ fn setup_bm() -> BmEnv<'static> {
     let contract_id = env.register(PredinexContract, ());
     let client: PredinexContractClient<'static> = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     BmEnv {
         env,

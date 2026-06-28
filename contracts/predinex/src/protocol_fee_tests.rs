@@ -15,7 +15,7 @@ fn setup_contract() -> (Env, PredinexContractClient<'static>, Address, Address) 
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     (env, client, token_admin, token_id.address())
 }

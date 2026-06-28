@@ -73,7 +73,7 @@ fn setup_test() -> TestEnv<'static> {
     let contract_id = env.register(PredinexContract, ());
     let client: PredinexContractClient<'static> = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &admin);
+    client.initialize(&token_id.address(), &admin, &admin);
 
     TestEnv { env, client, admin }
 }

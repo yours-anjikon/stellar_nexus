@@ -36,7 +36,7 @@ impl BenchCtx {
             .register_stellar_asset_contract_v2(token_admin.clone())
             .address();
 
-        client.initialize(&token_id, &treasury);
+        client.initialize(&token_id, &treasury, &treasury);
 
         BenchCtx {
             env,

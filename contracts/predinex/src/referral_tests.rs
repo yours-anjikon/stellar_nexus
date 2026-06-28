@@ -41,7 +41,7 @@ impl Ctx {
         let token_admin = Address::generate(&env);
         let token_asset = env.register_stellar_asset_contract_v2(token_admin.clone());
         let token_id = token_asset.address();
-        client.initialize(&token_id, &token_admin);
+        client.initialize(&token_id, &token_admin, &token_admin);
 
         Ctx { env, client, admin: token_admin, token_id }
     }

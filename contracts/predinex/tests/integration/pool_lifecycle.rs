@@ -5,7 +5,7 @@
 
 extern crate std;
 
-use predinex::{Pool, PredinexContract, PredinexContractClient};
+use predinex::{Pool, PredinexContract, PredinexContractClient, MIN_CREATOR_DEPOSIT};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
     token, Address, Env, String,
@@ -59,6 +59,7 @@ fn make_pool(ctx: &Ctx, creator: &Address) -> u32 {
         &String::from_str(&ctx.env, "Yes"),
         &String::from_str(&ctx.env, "No"),
         &3_600u64,
+        &MIN_CREATOR_DEPOSIT,
     )
 }
 
@@ -120,8 +121,7 @@ fn l3_losing_bettor_cannot_claim() {
         .place_bet(&loser, &pool_id, &1, &200, &None::<Address>);
 
     expire(&ctx);
-    ctx.client
-        .settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
+    ctx.client.settle_pool(&ctx.treasury, &pool_id, &0); // A wins
 
     ctx.client.claim_winnings(&loser, &pool_id);
 }
@@ -148,8 +148,7 @@ fn l4_two_winners_proportional_payout() {
         .place_bet(&loser, &pool_id, &1, &200, &None::<Address>); // 200 on B
 
     expire(&ctx);
-    ctx.client
-        .settle_pool(&ctx.client.get_admin(), &pool_id, &0); // A wins
+    ctx.client.settle_pool(&ctx.treasury, &pool_id, &0); // A wins
 
     // Total pool = 600. Fee 2% = 12. Net = 588. Winners total = 400.
     // w1 share = 300 * 588 / 400 = 441
@@ -210,8 +209,7 @@ fn e3_settle_before_expiry_rejected() {
 
     let pool_id = make_pool(&ctx, &creator);
     // Timestamp is still 0, pool expires at 3600
-    ctx.client
-        .settle_pool(&ctx.client.get_admin(), &pool_id, &0);
+    ctx.client.settle_pool(&ctx.treasury, &pool_id, &0);
 }
 
 /// E4: Minimum position — single token bet, single token LP deposit.
@@ -241,8 +239,7 @@ fn e5_maximum_positions_both_sides() {
         .place_bet(&side_b, &pool_id, &1, &big_amount, &None::<Address>);
 
     expire(&ctx);
-    ctx.client
-        .settle_pool(&ctx.client.get_admin(), &pool_id, &1); // B wins
+    ctx.client.settle_pool(&ctx.treasury, &pool_id, &1); // B wins
 
     // side_b is the sole winner: gets net pool = 2_000_000_000 - 2% = 1_960_000_000
     let winnings = ctx.client.claim_winnings(&side_b, &pool_id);
@@ -288,8 +285,7 @@ fn e9_dispute_after_window_rejected() {
         .place_bet(&user, &pool_id, &0, &100, &None::<Address>);
 
     expire(&ctx);
-    ctx.client
-        .settle_pool(&ctx.client.get_admin(), &pool_id, &0);
+    ctx.client.settle_pool(&ctx.treasury, &pool_id, &0);
 
     // Advance ledger past dispute window (7 days + 1 second)
     ctx.env.ledger().with_mut(|l| {
@@ -352,6 +348,6 @@ fn m9_rescue_tokens_rejects_non_admin() {
 
     let result = ctx
         .client
-        .try_rescue_tokens(&non_admin, &ctx.token.address(), &to, &100i128);
+        .try_rescue_tokens(&non_admin, &ctx.token.address, &to, &100i128);
     assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
 }

@@ -67,7 +67,7 @@ fn setup_fuzz_env() -> FuzzEnv<'static> {
     let contract_id = env.register(PredinexContract, ());
     let client: PredinexContractClient<'static> = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &admin);
+    client.initialize(&token_id.address(), &admin, &admin);
 
     FuzzEnv {
         env,
@@ -127,8 +127,15 @@ fn fuzz_create_pool_target() {
 
         // Run try_create_pool and verify that any crash or unexpected panic is caught.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            t.client
-                .try_create_pool(&t.admin, &title, &desc, &outcome_a, &outcome_b, &duration)
+            t.client.try_create_pool(
+                &t.admin,
+                &title,
+                &desc,
+                &outcome_a,
+                &outcome_b,
+                &duration,
+                &MIN_CREATOR_DEPOSIT,
+            )
         }));
 
         match result {

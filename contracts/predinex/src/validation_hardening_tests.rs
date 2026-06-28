@@ -20,7 +20,7 @@ fn setup() -> TestCtx<'static> {
     let token_id = env.register_stellar_asset_contract_v2(admin.clone());
     let contract_id = env.register(PredinexContract, ());
     let client: PredinexContractClient<'static> = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token_id.address(), &admin);
+    client.initialize(&token_id.address(), &admin, &admin);
     let token_admin = token::StellarAssetClient::new(&env, &token_id.address());
     token_admin.mint(&user, &10_000);
     token_admin.mint(&user_b, &10_000);

@@ -28,7 +28,7 @@ fn setup_e2e() -> E2eEnv<'static> {
     let contract_id = env.register(PredinexContract, ());
     let client: PredinexContractClient<'static> = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let freeze_admin = Address::generate(&env);
     client.set_freeze_admin(&token_admin, &freeze_admin);
