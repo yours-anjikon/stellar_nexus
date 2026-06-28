@@ -2888,7 +2888,7 @@ fn claim_status_loser_is_not_eligible_not_never_bet() {
 
 /// Cancelled pool: RefundClaimable → AlreadyClaimed after claim_refund.
 #[test]
-fn claim_status_cancelled_pool_transitions() {
+fn claim_status_voided_pool_transitions() {
     let t = setup();
     let pool_id = make_pool(&t);
 
@@ -2898,7 +2898,7 @@ fn claim_status_cancelled_pool_transitions() {
 
     t.client
         .place_bet(&user, &pool_id, &0, &200, &None::<Address>);
-    t.client.cancel_pool(&t.admin, &pool_id);
+    t.client.void_pool(&t.admin, &pool_id);
 
     assert_eq!(
         t.client.get_claim_status(&pool_id, &user),
@@ -2988,7 +2988,7 @@ fn i1_cancel_pool_before_bets_succeeds() {
     let pool_before = t.client.get_pool(&pool_id).expect("pool must exist");
     assert_eq!(pool_before.status, PoolStatus::Open);
 
-    t.client.cancel_pool(&t.admin, &pool_id);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "No bets placed yet"));
 
     let pool_after = t
         .client
@@ -3007,15 +3007,31 @@ fn i2_cancel_pool_after_first_bet_succeeds() {
     let t = setup();
     let pool_id = make_pool(&t);
 
+    let token_client = soroban_sdk::token::Client::new(&t.env, &t.token);
+    let bal_before = token_client.balance(&t.user);
+    assert_eq!(bal_before, 10_000i128);
+
     t.client
         .place_bet(&t.user, &pool_id, &0u32, &100i128, &None::<Address>);
-    t.client.cancel_pool(&t.admin, &pool_id);
+    
+    let bal_after_bet = token_client.balance(&t.user);
+    assert_eq!(bal_after_bet, 9_900i128);
+
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "Creator decided to cancel"));
 
     let pool_after = t
         .client
         .get_pool(&pool_id)
         .expect("pool must still exist after cancel");
     assert_eq!(pool_after.status, PoolStatus::Cancelled);
+
+    // Verify participant bet record is removed
+    let bet = t.client.get_user_bet(&pool_id, &t.user);
+    assert!(bet.is_none(), "bet record must be deleted after cancel_pool");
+
+    // Verify participant is refunded immediately
+    let bal_after_cancel = token_client.balance(&t.user);
+    assert_eq!(bal_after_cancel, 10_000i128, "user balance must be fully refunded");
 }
 
 /// I3: A non-creator cannot cancel the pool.
@@ -3026,7 +3042,7 @@ fn i3_non_creator_cannot_cancel_pool() {
     let pool_id = make_pool(&t);
 
     let other = Address::generate(&t.env);
-    t.client.cancel_pool(&other, &pool_id);
+    t.client.cancel_pool(&other, &pool_id, &String::from_str(&t.env, "attempt"));
 }
 
 /// I4: Pool records survive cancellation; storage is not silently deleted.
@@ -3035,7 +3051,7 @@ fn i4_cancelled_pool_record_is_retained() {
     let t = setup();
     let pool_id = make_pool(&t);
 
-    t.client.cancel_pool(&t.admin, &pool_id);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "retained"));
 
     let pool = t.client.get_pool(&pool_id);
     assert!(
@@ -3052,7 +3068,7 @@ fn i5_place_bet_on_cancelled_pool_rejected() {
     let t = setup();
     let pool_id = make_pool(&t);
 
-    t.client.cancel_pool(&t.admin, &pool_id);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "rejected"));
     t.client
         .place_bet(&t.user, &pool_id, &0u32, &100i128, &None::<Address>);
 }
@@ -3064,7 +3080,7 @@ fn i6_settle_cancelled_pool_rejected() {
     let t = setup();
     let pool_id = make_pool(&t);
 
-    t.client.cancel_pool(&t.admin, &pool_id);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "rejected"));
     expire_pool(&t.env);
     t.client.settle_pool(&t.admin, &pool_id, &0u32);
 }
@@ -3905,7 +3921,7 @@ fn test_pause_blocks_claim_refund() {
     let pool_id = make_pool(&t);
     t.client
         .place_bet(&t.user, &pool_id, &0, &100, &None::<Address>);
-    t.client.cancel_pool(&t.admin, &pool_id);
+    t.client.void_pool(&t.admin, &pool_id);
 
     t.client.set_paused(&t.admin, &true);
 
@@ -5562,4 +5578,169 @@ fn n5_get_user_claim_history_empty_for_no_claims() {
     let user = Address::generate(&env);
     let history = client.get_user_claim_history(&user, &0, &10);
     assert_eq!(history.len(), 0);
+}
+
+// ─── Suite O — Enhanced Pool Cancellation ─────────────────────────────────────
+
+#[test]
+fn cancel_pool_creator_before_expiry_refunds_all() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+
+    let user_a = Address::generate(&t.env);
+    let user_b = Address::generate(&t.env);
+
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&t.env, &t.token);
+    token_admin.mint(&user_a, &1000);
+    token_admin.mint(&user_b, &2000);
+
+    t.client.place_bet(&user_a, &pool_id, &0, &500, &None::<Address>);
+    t.client.place_bet(&user_b, &pool_id, &1, &1500, &None::<Address>);
+
+    let token_client = soroban_sdk::token::Client::new(&t.env, &t.token);
+    assert_eq!(token_client.balance(&user_a), 500);
+    assert_eq!(token_client.balance(&user_b), 500);
+
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "Creator cancel before expiry"));
+
+    assert_eq!(token_client.balance(&user_a), 1000);
+    assert_eq!(token_client.balance(&user_b), 2000);
+
+    let pool = t.client.get_pool(&pool_id).unwrap();
+    assert_eq!(pool.status, PoolStatus::Cancelled);
+    assert!(!pool.settled);
+}
+
+#[test]
+fn cancel_pool_anyone_after_expiry_refunds() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+
+    let user_a = Address::generate(&t.env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&t.env, &t.token);
+    token_admin.mint(&user_a, &1000);
+
+    t.client.place_bet(&user_a, &pool_id, &0, &500, &None::<Address>);
+
+    expire_pool(&t.env);
+
+    let anyone = Address::generate(&t.env);
+    t.client.cancel_pool(&anyone, &pool_id, &String::from_str(&t.env, "Anyone cancel after expiry"));
+
+    let token_client = soroban_sdk::token::Client::new(&t.env, &t.token);
+    assert_eq!(token_client.balance(&user_a), 1000);
+
+    let pool = t.client.get_pool(&pool_id).unwrap();
+    assert_eq!(pool.status, PoolStatus::Cancelled);
+}
+
+#[test]
+fn cancel_pool_admin_emergency_cancel() {
+    let t = setup();
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&t.env, &t.token);
+
+    let creator = Address::generate(&t.env);
+    token_admin.mint(&creator, &10_000i128);
+
+    let other_pool_id = t.client.create_pool(
+        &creator,
+        &String::from_str(&t.env, "Other test pool"),
+        &String::from_str(&t.env, "Description"),
+        &String::from_str(&t.env, "Yes"),
+        &String::from_str(&t.env, "No"),
+        &3_600u64,
+        &MIN_CREATOR_DEPOSIT,
+    );
+
+    let user_a = Address::generate(&t.env);
+    token_admin.mint(&user_a, &1000);
+    t.client.place_bet(&user_a, &other_pool_id, &0, &300, &None::<Address>);
+
+    t.client.cancel_pool(&t.admin, &other_pool_id, &String::from_str(&t.env, "Admin emergency cancel"));
+
+    let token_client = soroban_sdk::token::Client::new(&t.env, &t.token);
+    assert_eq!(token_client.balance(&user_a), 1000);
+
+    let pool = t.client.get_pool(&other_pool_id).unwrap();
+    assert_eq!(pool.status, PoolStatus::Cancelled);
+}
+
+#[test]
+#[should_panic]
+fn cancel_pool_already_settled_rejected() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+    expire_pool(&t.env);
+    t.client.settle_pool(&t.admin, &pool_id, &0u32);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "already settled"));
+}
+
+#[test]
+#[should_panic]
+fn cancel_pool_already_cancelled_rejected() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "first cancel"));
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "second cancel"));
+}
+
+#[test]
+#[should_panic]
+fn cancel_pool_voided_pool_rejected() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+    t.client.void_pool(&t.admin, &pool_id);
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "cancel voided"));
+}
+
+#[test]
+#[should_panic]
+fn cancel_pool_non_creator_before_expiry_rejected() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+    let other = Address::generate(&t.env);
+    t.client.cancel_pool(&other, &pool_id, &String::from_str(&t.env, "unauthorized"));
+}
+
+#[test]
+fn cancel_pool_emits_event() {
+    let t = setup();
+    let pool_id = make_pool(&t);
+
+    let user_a = Address::generate(&t.env);
+    let user_b = Address::generate(&t.env);
+
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&t.env, &t.token);
+    token_admin.mint(&user_a, &1000);
+    token_admin.mint(&user_b, &2000);
+
+    t.client.place_bet(&user_a, &pool_id, &0, &500, &None::<Address>);
+    t.client.place_bet(&user_b, &pool_id, &1, &1500, &None::<Address>);
+
+    t.client.cancel_pool(&t.admin, &pool_id, &String::from_str(&t.env, "Creator cancel before expiry"));
+
+    let events = t.env.events().all();
+    let event = events.events().last().expect("must emit event");
+
+    let topic0: soroban_sdk::Symbol =
+        soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, event, 0)).unwrap();
+    let topic1: u32 =
+        soroban_sdk::TryFromVal::try_from_val(&t.env, &xdr_topic_val(&t.env, event, 1)).unwrap();
+    assert_eq!(topic0, soroban_sdk::Symbol::new(&t.env, "cancel_pool"));
+    assert_eq!(topic1, pool_id);
+
+    let data_val: Val = match &event.body {
+        soroban_sdk::xdr::ContractEventBody::V0(v0) => {
+            <Val as soroban_sdk::TryFromVal<Env, soroban_sdk::xdr::ScVal>>::try_from_val(
+                &t.env, &v0.data,
+            )
+            .unwrap()
+        }
+    };
+    let payload: crate::PoolCancelledEvent =
+        soroban_sdk::TryFromVal::try_from_val(&t.env, &data_val).unwrap();
+    assert_eq!(payload.cancelled_by, t.admin);
+    assert_eq!(payload.reason, String::from_str(&t.env, "Creator cancel before expiry"));
+    assert_eq!(payload.total_refunded, 2000i128);
+    assert_eq!(payload.participant_count, 2);
 }

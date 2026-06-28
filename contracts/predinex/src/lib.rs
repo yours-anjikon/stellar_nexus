@@ -890,6 +890,16 @@ pub struct PoolRefundedEvent {
     pub total_refunded: i128,
 }
 
+/// Event payload emitted by the enhanced `cancel_pool`.
+#[derive(Clone)]
+#[contracttype]
+pub struct PoolCancelledEvent {
+    pub cancelled_by: Address,
+    pub reason: String,
+    pub total_refunded: i128,
+    pub participant_count: u32,
+}
+
 /// Event payload emitted by `extend_pool_duration`.
 ///
 /// Fields
@@ -3057,14 +3067,33 @@ impl PredinexContract {
     }
 
     /// #160 — Cancel a pool before it is settled.
+    /// Cancel a pool and refund all participants.
     ///
-    /// Only the pool creator may call this, and only while both outcome totals
-    /// remain at zero (i.e. no participant has entered the pool). Once cancelled
-    /// the pool transitions to the `Cancelled` terminal state; it cannot be
-    /// settled, voided, or bet into afterward. A `cancel_pool` event is emitted
-    /// so indexers and the UI can update their state immediately.
-    pub fn cancel_pool(env: Env, creator: Address, pool_id: u32) -> Result<(), ContractError> {
-        creator.require_auth();
+    /// Allows:
+    /// 1. The creator to cancel the pool before expiry (if status is Open).
+    /// 2. The admin to cancel the pool at any time (emergency cancel).
+    /// 3. Anyone to trigger cancellation after expiry if the pool hasn't been settled.
+    pub fn cancel_pool(
+        env: Env,
+        caller: Address,
+        pool_id: u32,
+        reason: String,
+    ) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_not_paused(&env)?;
+
+        if env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::PoolIsMultiAsset(pool_id))
+            .unwrap_or(false)
+        {
+            return Err(ContractError::MultiAssetClaimRequired);
+        }
+
+        if reason.len() > 256 {
+            return Err(ContractError::DescriptionTooLong);
+        }
 
         let mut pool = env
             .storage()
@@ -3072,19 +3101,68 @@ impl PredinexContract {
             .get::<_, Pool>(&DataKey::Pool(pool_id))
             .ok_or(ContractError::PoolNotFound)?;
 
-        if creator != pool.creator {
+        match pool.status {
+            PoolStatus::Settled(_) => return Err(ContractError::PoolAlreadySettled),
+            PoolStatus::Voided => return Err(ContractError::PoolAlreadyVoided),
+            PoolStatus::Cancelled => return Err(ContractError::PoolIsCancelled),
+            _ => {}
+        }
+
+        let admin = Self::get_admin(env.clone());
+        let is_admin = admin.is_some() && admin.unwrap() == caller;
+        let is_creator = pool.creator == caller;
+        let is_expired = env.ledger().timestamp() > pool.expiry;
+
+        let auth_ok = is_admin || (is_creator && pool.status == PoolStatus::Open) || (is_expired && pool.status == PoolStatus::Open);
+
+        if !auth_ok {
             return Err(ContractError::Unauthorized);
         }
 
-        if pool.status != PoolStatus::Open {
-            return Err(ContractError::PoolNotOpen);
+        // Refund all participants (bettors).
+        let bettors = env
+            .storage()
+            .persistent()
+            .get::<_, Vec<Address>>(&DataKey::PoolBettors(pool_id))
+            .unwrap_or_else(|| Vec::new(&env));
+
+        let mut total_refunded: i128 = 0;
+        let mut participant_count: u32 = 0;
+
+        let token_address = env
+            .storage()
+            .persistent()
+            .get::<_, Address>(&DataKey::Token)
+            .ok_or(ContractError::NotInitialized)?;
+        let token_client = token::Client::new(&env, &token_address);
+
+        for bettor in bettors.iter() {
+            if let Some(user_bet) = env
+                .storage()
+                .persistent()
+                .get::<_, UserBet>(&DataKey::UserBet(pool_id, bettor.clone()))
+            {
+                let refund = user_bet.total_bet;
+                if refund > 0 {
+                    token_client.transfer(&env.current_contract_address(), &bettor, &refund);
+                    total_refunded = total_refunded.checked_add(refund).unwrap_or(total_refunded);
+                    participant_count += 1;
+                }
+                env.storage()
+                    .persistent()
+                    .remove(&DataKey::UserBet(pool_id, bettor.clone()));
+                env.storage()
+                    .persistent()
+                    .remove(&DataKey::UserOutcomeBets(pool_id, bettor.clone()));
+            }
         }
 
         pool.status = PoolStatus::Cancelled;
         env.storage()
             .persistent()
             .set(&DataKey::Pool(pool_id), &pool);
-        // #189 — cancelled pool must stay accessible for refund claims.
+
+        // #189 — cancelled pool must stay accessible for queries/records.
         env.storage().persistent().extend_ttl(
             &DataKey::Pool(pool_id),
             POOL_BUMP_THRESHOLD,
@@ -3097,7 +3175,12 @@ impl PredinexContract {
                 event_version(&env),
                 pool_id,
             ),
-            creator,
+            PoolCancelledEvent {
+                cancelled_by: caller,
+                reason,
+                total_refunded,
+                participant_count,
+            },
         );
 
         Ok(())
