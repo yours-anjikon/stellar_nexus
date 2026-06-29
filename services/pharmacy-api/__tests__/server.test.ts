@@ -124,4 +124,13 @@ describe("pharmacy API persistence", () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toContain("80 characters");
   });
+
+  it("returns 404 and NO_PRICES_FOUND for an unknown drug", async () => {
+    const response = await request(app)
+      .get("/pharmacy/compare")
+      .query({ drug: "UnknownDrug", zip: "90210" });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ ok: false, reason: "NO_PRICES_FOUND" });
+  });
 });

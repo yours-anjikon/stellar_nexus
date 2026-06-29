@@ -110,6 +110,13 @@ export const x402TxExtractionFailedTotal = new Counter({
   registers: [registry],
 });
 
+export const pharmacyUnknownDrugTotal = new Counter({
+  name: "pharmacy_unknown_drug_total",
+  help: "Total pharmacy price lookups for unknown drugs",
+  labelNames: ["drug"] as const,
+  registers: [registry],
+});
+
 export const agentLlmErrorTotal = new Counter({
   name: "agent_llm_error_total",
   help: "Total LLM API errors during agent runs",

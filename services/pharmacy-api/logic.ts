@@ -60,6 +60,9 @@ export function buildCompareResponse(options: {
   prices: PharmacyPriceRecord[];
   protocolPrice?: string;
 }) {
+  if (!options.prices || options.prices.length === 0) {
+    return { ok: false, reason: "NO_PRICES_FOUND" } as any;
+  }
   const zipVariance = parseInt(options.zip.slice(-2), 10) % 10;
   const adjustedPrices = options.prices.map((price, index) => ({
     ...price,

@@ -2397,7 +2397,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'compare_pharmacy_prices',
     description:
-      'Compare medication prices across multiple pharmacies. Pays $0.002 USDC per query via x402 on Stellar. Pass the medication dosage exactly as known; the returned dosage field is reliable and echoed from the request for safety. Returns prices sorted cheapest to most expensive, with potential savings. Each pharmacy has an inStock field: "unknown" means real-time inventory is unavailable (proceed with caution), true means in stock. Never assume a medication is in stock if inStock is "unknown" — confirm with the pharmacy before ordering.',
+      'Compare medication prices across multiple pharmacies. Pays $0.002 USDC per query via x402 on Stellar. Pass the medication dosage exactly as known; the returned dosage field is reliable and echoed from the request for safety. Returns prices sorted cheapest to most expensive, with potential savings. If the medication is unknown or no prices are found, the tool returns { ok: false, reason: "NO_PRICES_FOUND" } which you should handle gracefully (e.g. notify the caregiver). Each pharmacy has an inStock field: "unknown" means real-time inventory is unavailable (proceed with caution), true means in stock. Never assume a medication is in stock if inStock is "unknown" — confirm with the pharmacy before ordering.',
     input_schema: strictInputSchema({
       type: 'object' as const,
       properties: {

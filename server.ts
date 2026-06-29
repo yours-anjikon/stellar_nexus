@@ -39,6 +39,8 @@ import { requestLoggerMiddleware } from "./shared/request-logger.ts";
 import {
   metricsHandler,
   agentRunsTotal,
+  agentToolCallsTotal,
+  pharmacyUnknownDrugTotal,
 } from "./shared/metrics.ts";
 
 // Shared agent pause state + wallet low-balance scheduler
@@ -532,6 +534,11 @@ app.get("/pharmacy/compare", perRouteLimiters.pharmacyCompare, concurrentRequest
 
   try {
     const prices = pharmacyStore.getPrices(drug);
+    if (prices.length === 0) {
+      pharmacyUnknownDrugTotal.inc({ drug });
+      res.status(404).json({ ok: false, reason: "NO_PRICES_FOUND" });
+      return;
+    }
     res.json(
       buildCompareResponse({
         drug,
@@ -543,11 +550,8 @@ app.get("/pharmacy/compare", perRouteLimiters.pharmacyCompare, concurrentRequest
       }),
     );
   } catch (error) {
-    res.status(404).json({
-      error: error instanceof Error ? error.message : `Drug "${drug}" not found`,
-      provider: "sqlite",
-      drugCount: pharmacyStore.getDrugCount(),
-    });
+    pharmacyUnknownDrugTotal.inc({ drug });
+    res.status(404).json({ ok: false, reason: "NO_PRICES_FOUND" });
   }
 });
 
@@ -806,7 +810,7 @@ app.get("/drug/interactions", perRouteLimiters.drugInteractions, concurrentReque
 // MPP PHARMACY PAYMENT (was port 3005)
 // ============================================================
 
-const DATA_DIR = process.env.DATA_DIR || new URL("./data", import.meta.url).pathname;
+const DATA_DIR = process.env.DATA_DIR || fileURLToPath(new URL("./data", import.meta.url));
 const ORDERS_FILE = `${DATA_DIR}/orders.json`;
 const MPP_STORE_FILE = `${DATA_DIR}/mpp-store.json`;
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });

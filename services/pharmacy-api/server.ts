@@ -22,6 +22,7 @@ import { applySecurityMiddleware } from "../../shared/security-middleware.ts";
 import { logger } from "../../shared/logger.ts";
 import { requestContextMiddleware } from "../../shared/request-context.ts";
 import { requestLoggerMiddleware } from "../../shared/request-logger.ts";
+import { pharmacyUnknownDrugTotal } from "../../shared/metrics.ts";
 import type { PharmacyPricingStore } from "./db.ts";
 import { createPharmacyPricingStore } from "./db.ts";
 import { resolveRequestedDosage } from "./dosage.ts";
@@ -271,6 +272,11 @@ export function createPharmacyApp(options: PharmacyAppOptions) {
 
     try {
       const prices = pricingStore.getPrices(drug);
+      if (prices.length === 0) {
+        pharmacyUnknownDrugTotal.inc({ drug });
+        res.status(404).json({ ok: false, reason: "NO_PRICES_FOUND" });
+        return;
+      }
       res.json(
         buildCompareResponse({
           drug,
@@ -282,12 +288,8 @@ export function createPharmacyApp(options: PharmacyAppOptions) {
         }),
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      res.status(404).json({
-        error: errorMessage,
-        provider: "sqlite",
-        drugCount: pricingStore.getDrugCount(),
-      });
+      pharmacyUnknownDrugTotal.inc({ drug });
+      res.status(404).json({ ok: false, reason: "NO_PRICES_FOUND" });
     }
   });
 
