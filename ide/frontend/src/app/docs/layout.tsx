@@ -58,6 +58,8 @@ const NAV = [
     id: "registry", label: "Registry", icon: <Layers size={14} />,
     children: [
       { id: "registry-contract", label: "Contract Details" },
+      { id: "registry-reputation", label: "Reputation Registry" },
+      { id: "registry-verifier", label: "Verifier Registry" },
       { id: "registry-api",      label: "HiveClient API" },
       { id: "registry-events",   label: "Events" },
     ],
