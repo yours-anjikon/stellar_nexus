@@ -18,12 +18,13 @@ Mycelium is a comprehensive developer platform designed to eliminate the "Rust t
 
 ---
 
-## Production Deployment URL Hub
+## All Live Links
 
+* **Pitch Deck**: [Link](https://...)
+* **Demo Video**: [Link](https://...)
 * **Web IDE Frontend**: [https://mycelium.isriz.xyz](https://mycelium.isriz.xyz)
 * **Web IDE API Backend**: [https://mycelium-zgez.onrender.com](https://mycelium-zgez.onrender.com)
-* **On-Chain Hive Registry (Stellar Testnet)**: 
-  `CCHLAG6L4C6ETKD3ZOYE4GRP3VRUB6A2ES6P52VTENXQURL2VFWXI4XC`
+* **On-Chain Hive Registry (Stellar Testnet)**: `CCHLAG6L4C6ETKD3ZOYE4GRP3VRUB6A2ES6P52VTENXQURL2VFWXI4XC`
 
 ### PyPI Package Registry Links
 The toolchain is published as modular packages on PyPI:
