@@ -20,7 +20,7 @@ Mycelium is a comprehensive developer platform designed to eliminate the "Rust t
 
 ## All Live Links
 
-* **Pitch Deck**: [Link](https://...)
+* **Pitch Deck**: [https://l1nk.dev/4a0mpth](https://l1nk.dev/4a0mpth)
 * **Demo Video**: [Link](https://...)
 * **Web IDE Frontend**: [https://mycelium.isriz.xyz](https://mycelium.isriz.xyz)
 * **Web IDE API Backend**: [https://mycelium-zgez.onrender.com](https://mycelium-zgez.onrender.com)
