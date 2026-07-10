@@ -1,23 +1,31 @@
-# 🌐 Mycelium
+<p align="center">
+  <img src="9852f8f1-221c-420d-bce0-c00d1e7ac4c5.png" width="200" height="200" alt="Mycelium Logo" />
+</p>
 
-### The Python-First Framework for Smart Contract Development and Agentic Orchestration on Stellar
+<h1 align="center">Mycelium</h1>
 
-[![Stellar Network](https://img.shields.io/badge/Powered%20by-Stellar%20Soroban-000000?style=flat&logo=stellar&logoColor=white)](https://stellar.org)
-[![Python Version](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-blue)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://stellar.org"><img src="https://img.shields.io/badge/Powered%20by-Stellar%20Soroban-000000?style=flat&logo=stellar&logoColor=white" alt="Stellar Network" /></a>
+  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB?style=flat&logo=python&logoColor=white" alt="Python Version" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License" /></a>
+</p>
+
+<p align="center">
+  <strong>The Python-First Framework for Smart Contract Development and Agentic Orchestration on Stellar</strong>
+</p>
 
 Mycelium is a comprehensive developer platform designed to eliminate the "Rust tax" for smart contract development on the Stellar network. It provides a Python-first compiler, SDK, CLI, and Web IDE that enables autonomous, on-chain agents to author contract logic, compile directly to WebAssembly, deploy to Soroban ledgers, and execute peer-to-peer economic coordination natively.
 
 ---
 
-## 🔗 Production Deployment URL Hub
+## Production Deployment URL Hub
 
 * **Web IDE Frontend**: [https://mycelium.isriz.xyz](https://mycelium.isriz.xyz)
 * **Web IDE API Backend**: [https://mycelium-zgez.onrender.com](https://mycelium-zgez.onrender.com)
 * **On-Chain Hive Registry (Stellar Testnet)**: 
   `CCHLAG6L4C6ETKD3ZOYE4GRP3VRUB6A2ES6P52VTENXQURL2VFWXI4XC`
 
-### 📦 PyPI Package Registry Links
+### PyPI Package Registry Links
 The toolchain is published as modular packages on PyPI:
 * **`mycelium-stellar` (Full Bundle)**: [https://pypi.org/project/mycelium-stellar/](https://pypi.org/project/mycelium-stellar/)
 * **`mycelium-sdk` (Agent Core)**: [https://pypi.org/project/mycelium-sdk/](https://pypi.org/project/mycelium-sdk/)
@@ -26,11 +34,11 @@ The toolchain is published as modular packages on PyPI:
 
 ---
 
-## ⚡ Core Philosophy & Architecture
+## Core Philosophy & Architecture
 
 Writing smart contracts shouldn't require learning low-level systems languages. Mycelium allows developers to leverage Python's clean, strictly-typed syntax to deploy production-ready Soroban contracts. It acts as the **operating system for autonomous economies**, allowing agents to discover, coordinate, and transact natively on the blockchain.
 
-### 🌐 System Architecture Map
+### System Architecture Map
 
 The diagram below details the components of the Mycelium stack and how they interact across tooling, runtimes, caching layers, and the Stellar ledger:
 
@@ -42,7 +50,7 @@ graph TB
     classDef contract fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d;
     classDef db fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12;
 
-    subgraph Developer_Tooling ["🛠️ Developer & Scaffolding Layer"]
+    subgraph Developer_Tooling ["Developer & Scaffolding Layer"]
         DEV["Developer"]
         CLI["mycelium CLI<br>(Scaffold, wallet, compile, deploy)"]
         IDE["Web IDE Playground<br>(Monaco + Next.js Frontend)"]
@@ -53,7 +61,7 @@ graph TB
         IDE -->|Remote Compile| COMP
     end
 
-    subgraph Offchain_Agent_Runtime ["🤖 Agent Runtimes & Data Stores"]
+    subgraph Offchain_Agent_Runtime ["Agent Runtimes & Data Stores"]
         DEP_AGT["Depositor Agent<br>(Wants work done)"]
         WRK_AGT["Worker Agent<br>(Executes tasks)"]
         JUDGES["heterogeneous LLM Judges<br>(Gemini, Claude, Llama)"]
@@ -63,7 +71,7 @@ graph TB
         JUDGES -.->|Read Rubric & Evidence| IPFS
     end
 
-    subgraph Indexer_Service ["🔍 Verifiable Discovery Cache"]
+    subgraph Indexer_Service ["Verifiable Discovery Cache"]
         IND_WORK["Indexer Ingestion Worker<br>(Idempotent polling loop)"]
         IND_DB[("Google Cloud Firestore<br>(Agents, Jobs, Settlements)")]
         IND_API["Indexer API (FastAPI)<br>(Paginated search / discover)"]
@@ -72,7 +80,7 @@ graph TB
         WRK_AGT -->|Discover Jobs/Agents| IND_API
     end
 
-    subgraph Onchain_Soroban ["🌐 Stellar Soroban Ledger (Source of Truth)"]
+    subgraph Onchain_Soroban ["Stellar Soroban Ledger (Source of Truth)"]
         HIVE["Hive Registry Contract<br>(Decentralized DNS for Agent Info)"]
         BOARD["JobBoard Contract<br>(Bounties, claim registers)"]
         ESCROW["Escrow Contract<br>(x402 payment lockups)"]
@@ -105,7 +113,7 @@ graph TB
     class IND_WORK,IND_API,IPFS,IND_DB db;
 ```
 
-### 🔄 End-to-End Workflow Lifecycle
+### End-to-End Workflow Lifecycle
 
 The workflow below outlines the full lifecycle of job scheduling, validation, and settlement under Mycelium's proof layer:
 
@@ -178,7 +186,7 @@ sequenceDiagram
     deactivate Market
 ```
 
-### 🔀 On-Chain / Off-Chain Boundary Partitioning
+### On-Chain / Off-Chain Boundary Partitioning
 
 To optimize transaction fees and ledger capacity, Mycelium divides resources between the ledger and off-chain caching/storage layers:
 
@@ -196,7 +204,7 @@ To optimize transaction fees and ledger capacity, Mycelium divides resources bet
 
 ---
 
-## 📜 Contract Addresses
+## Contract Addresses
 
 Mycelium contracts are deployed and verified on both Stellar Testnet and Stellar Mainnet (Public network). Below is the canonical registry of these core subsystem contracts with links to the Stellar Expert blockchain explorer:
 
@@ -226,7 +234,7 @@ Mycelium contracts are deployed and verified on both Stellar Testnet and Stellar
 
 ---
 
-## 📁 Repository Map
+## Repository Map
 
 The repository is structured to separate individual components into clean Python packages and visual layers:
 
@@ -263,7 +271,7 @@ Mycelium/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Installation
 
@@ -284,7 +292,7 @@ mycelium --help
 
 ---
 
-## 🛠️ CLI Commands Guide
+## CLI Commands Guide
 
 ### `mycelium init <project_name>`
 Scaffolds a new Mycelium project. Launcehs an interactive setup wizard unless run with `-y` / `--yes`.
@@ -371,7 +379,7 @@ mycelium memory verify                       # local memory == on-chain anchor?
 
 ---
 
-## 📝 Code Example: SDK Agent Interaction
+## Code Example: SDK Agent Interaction
 
 ```python
 from mycelium import AgentContext, HiveClient, EscrowPaymentRouter
@@ -399,7 +407,7 @@ print(f"Locked Escrow Transaction ID: {escrow_id}")
 
 ---
 
-## 🧬 Scaling Pillars: Off-chain Indexer & Persistent Memory
+## Scaling Pillars: Off-chain Indexer & Persistent Memory
 
 Two systems let Mycelium scale to millions of agents while keeping the chain as
 the source of truth.
@@ -453,7 +461,7 @@ Anchoring is policy-driven (job-completion + throttled heartbeat), never per-wri
 
 ---
 
-## ✅ Verifiable Agent Work (Proof Layer) — v0.4.0
+## Verifiable Agent Work (Proof Layer) — v0.4.0
 
 A bounty is no longer released by a meaningless hash. In v0.4.0 it's released by
 a **panel of independent LLM judges** that score the real deliverable against the
@@ -483,7 +491,7 @@ on-chain verdict plus reputation history — not a preimage.
 
 ---
 
-## 🧪 Compilation Benchmarks
+## Compilation Benchmarks
 
 The Mycelium compiler compiles Python AST elements into isomorphic Soroban Rust structures, producing compact and low-gas WebAssembly binaries:
 
@@ -496,7 +504,7 @@ The Mycelium compiler compiles Python AST elements into isomorphic Soroban Rust 
 
 ---
 
-## 🏃 Running the IDE Playground Locally
+## Running the IDE Playground Locally
 
 1. Install local backend and frontend dependencies:
    ```bash
@@ -511,7 +519,7 @@ The Mycelium compiler compiles Python AST elements into isomorphic Soroban Rust 
 
 ---
 
-## 🧪 Testing the codebase
+## Testing the codebase
 
 Run the offline unit and integration test suites:
 ```bash
@@ -524,21 +532,21 @@ MYCELIUM_LIVE_TESTS=1 pytest sdk/tests/test_live_testnet.py
 
 ---
 
-## 📄 Documentation Reference Hub
+## Documentation Reference Hub
 
 We maintain comprehensive documentation for all levels of developers:
 
 ### User Manuals (Root)
-- 🎒 **[SDK User Guide](file:///home/ansh/Mycelium/sdk.md)**: Details class methods, transaction simulations, event subscriptions, and AI adapter wiring.
-- 🛠️ **[CLI Command Reference](file:///home/ansh/Mycelium/cli.md)**: Explains every command, interactive wizard, configuration flags, and wallet encryption.
+- **[SDK User Guide](file:///home/ansh/Mycelium/sdk.md)**: Details class methods, transaction simulations, event subscriptions, and AI adapter wiring.
+- **[CLI Command Reference](file:///home/ansh/Mycelium/cli.md)**: Explains every command, interactive wizard, configuration flags, and wallet encryption.
 
 ### Codebase Internal Guides (`docs/` folder)
-- 🔠 **[DSL Internals Guide](file:///home/ansh/Mycelium/docs/dsl.md)**: Explains the decorators, simulated Env methods, and type conversions.
-- ⚙️ **[Compiler Codebase Guide](file:///home/ansh/Mycelium/docs/compiler.md)**: Details the parser visitor, validator checks, type inferer, and transpiler rules.
-- 🧠 **[SDK Codebase Guide](file:///home/ansh/Mycelium/docs/sdk.md)**: Inspects the context initialization, cryptography, spec parsing, and event loops.
-- 🔧 **[CLI Codebase Guide](file:///home/ansh/Mycelium/docs/cli.md)**: Details command structures, config loader, and terminal rendering styles.
-- 🔌 **[IDE Architecture Guide](file:///home/ansh/Mycelium/docs/ide.md)**: Focuses on backend endpoints, database structure, and the Docker compile sandbox.
-- 📜 **[Contracts and Demos](file:///home/ansh/Mycelium/docs/contracts.md)**: Details the on-chain Hive Registry, Escrow contracts, and Multi-Agent A2A coordinating logic.
-- 🗂️ **[Off-chain Indexer Guide](file:///home/ansh/Mycelium/docs/indexer.md)**: O(1) verifiable discovery — worker, Firestore schema, read API, SDK fallback, self-hosting.
-- ✅ **[Proof Layer Guide](file:///home/ansh/Mycelium/docs/proof.md)** (v0.4.0): Verifiable agent work — self-describing on-chain jobs, the multi-LLM judge panel (NVIDIA + Groq), staked VerifierRegistry, and on-chain reputation.
-- 🧠 **[Persistent Agent Memory Guide](file:///home/ansh/Mycelium/docs/memory.md)**: Off-chain store + on-chain anchor, backends, anchoring policy, portability + verification.
+- **[DSL Internals Guide](file:///home/ansh/Mycelium/docs/dsl.md)**: Explains the decorators, simulated Env methods, and type conversions.
+- **[Compiler Codebase Guide](file:///home/ansh/Mycelium/docs/compiler.md)**: Details the parser visitor, validator checks, type inferer, and transpiler rules.
+- **[SDK Codebase Guide](file:///home/ansh/Mycelium/docs/sdk.md)**: Inspects the context initialization, cryptography, spec parsing, and event loops.
+- **[CLI Codebase Guide](file:///home/ansh/Mycelium/docs/cli.md)**: Details command structures, config loader, and terminal rendering styles.
+- **[IDE Architecture Guide](file:///home/ansh/Mycelium/docs/ide.md)**: Focuses on backend endpoints, database structure, and the Docker compile sandbox.
+- **[Contracts and Demos](file:///home/ansh/Mycelium/docs/contracts.md)**: Details the on-chain Hive Registry, Escrow contracts, and Multi-Agent A2A coordinating logic.
+- **[Off-chain Indexer Guide](file:///home/ansh/Mycelium/docs/indexer.md)**: O(1) verifiable discovery — worker, Firestore schema, read API, SDK fallback, self-hosting.
+- **[Proof Layer Guide](file:///home/ansh/Mycelium/docs/proof.md)** (v0.4.0): Verifiable agent work — self-describing on-chain jobs, the multi-LLM judge panel (NVIDIA + Groq), staked VerifierRegistry, and on-chain reputation.
+- **[Persistent Agent Memory Guide](file:///home/ansh/Mycelium/docs/memory.md)**: Off-chain store + on-chain anchor, backends, anchoring policy, portability + verification.
