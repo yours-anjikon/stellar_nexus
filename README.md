@@ -532,6 +532,28 @@ MYCELIUM_LIVE_TESTS=1 pytest sdk/tests/test_live_testnet.py
 
 ---
 
+## Go-To-Market (GTM) Strategy
+
+To accelerate adoption and build a thriving ecosystem, Mycelium executes a dual-phase GTM strategy focused on developer onboarding and community-led scaling.
+
+### Achievements So Far
+* **Hands-on Developer Onboarding**: Organized a hands-on session on [Luma](https://luma.com/yznmty9i) to onboard builders to the Mycelium framework.
+  * **130+ Total Registrations** with **60+ active builders** actively participating in the workshop.
+  * Check the [on-site session verification on X](https://x.com/Myceliumstellar/status/2075247619270721776?s=20).
+* **Builder Testimonials**:
+  * [Mahesh Rakte's Testimonial](https://x.com/maheshrakte0/status/2075272599245119686?s=20)
+  * [Om Gupta's Testimonial](https://x.com/guptaom14/status/2075247883180487127?s=20)
+  * [Subhomoy's Testimonial](https://x.com/Subhomoy77/status/2075240120207519970?s=20)
+  * [Abhinav Singh's Testimonial](https://x.com/AbhinavSin93603/status/2075240149471183008?s=20)
+  * [Gaurav Karakoti's Testimonial](https://x.com/GauravKara_koti/status/2075237951672582151?s=20)
+
+### Future Plans
+* **Scale Onboarding**: Continue running targeted, hands-on workshops, seminars, and developer bootcamps.
+* **Developer Toolkits**: Expand out-of-the-box templates and SDK adapters to simplify building on-chain autonomous agents.
+* **Ecosystem Growth**: Partner with Stellar and Soroban builder communities to run dedicated hackathons and bounty challenges, driving integration and protocol usage.
+
+---
+
 ## Documentation Reference Hub
 
 We maintain comprehensive documentation for all levels of developers:
